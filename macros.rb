@@ -4,20 +4,10 @@
 require "json"
 
 # Methods that allow for dice rolls, with common roll types having their own
-#   methods.
+#   methods. All methods are module methods and should be called on the Macros
+#   module.
 class Macros
-  attr_reader :creatures
-  
-  def initialize
-    @creatures = { }
-    file = File.read("macros.json")
-    file_hash = JSON.parse(file)
-    
-    file_hash.each do |name, info|
-      @creatures[name] = Creature.new(name, info)
-    end
-  end
-  
+
   # Makes a speudorandom dice roll of any arbitrary count and faces.
   #
   # notation - A dice notation, such as 1d6, as a String.
@@ -29,7 +19,7 @@ class Macros
   #
   # Returns an Array with two items--an Integer sum of the rolls, and an
   #   Array of the individual roll Integers.
-  def roll(notation)
+  def self.roll(notation)
     notation = notation.split("d")
     dice     = []
     sum      = 0
@@ -54,7 +44,7 @@ class Macros
   #   # => 16 to hit [14 + 2]
   #
   # Returns a String detailing how the roll went.
-  def hit(attack_mod)
+  def self.hit(attack_mod)
     result = rand(1..20)
     return "#{result + attack_mod} to hit ([#{result}] + #{attack_mod})"
     
@@ -63,12 +53,11 @@ class Macros
     # end
   end
   
-  def attack(action)
+  def self.attack(action)
     result = roll(action[1])
     return "#{hit(action[0])}\n"\
            "#{result[0]} #{action[2]} damage #{result[1]}"
   end
-  
 end
 
 # A character sheet, basically. Contains no methods that are useful for
@@ -114,10 +103,18 @@ class Creature
   end
 end
 
+# The class which contains the main loop, as well as other methods nessicary
+#   for running the script.
 class Main
   def initialize
-    @macros = Macros.new
-  end
+      @creatures = { }
+      file = File.read("macros.json")
+      file_hash = JSON.parse(file)
+      
+      file_hash.each do |name, info|
+        @creatures[name] = Creature.new(name, info)
+      end
+    end
   
   def run
     while true do
@@ -127,18 +124,38 @@ class Main
       if command == "quit"
         exit
       else
-        puts check(command, @macros.creatures.keys)
+        puts check(command, @creatures.keys)
+        # creature = check(command, @creatures.keys)
+        # action   = check(creature[1], creature[2]])
+        # @creatures[creature].actions
+         
       end
     end
   end
   
-  def check(string, list, depth = 0)
+  # Parses the beginning of a String, and tries to interpret what item in a
+  # Array it is referring to. (Ugh. Maybe make a better description.)
+  #
+  # command - The String that will be parsed.
+  # names   - The Array of Strings that the command will be checked against.
+  # depth   - An Integer of how many words at the start of the command should be
+  #           checked. This number is automatically incremeneted as the method
+  #           recurses, and should not be set manually.
+  #
+  # Examples
+  #
+  #   check("knight sword", ["knight", "priest"])
+  #   # => ["knight", "roll 1d6"]
+  #
+  #   check("kni sw")
+  #
+  def check(command, names, depth = 0)
     matches = 0
-    result = nil
+    current_name = nil
     
-    list.each do |item|
-      if item.start_with?(string.split[0..depth].join(" "))
-        result = item
+    names.each do |name|
+      if name.start_with?(command.split[0..depth].join(" "))
+        current_name = name
         matches += 1
       end
     end
@@ -146,18 +163,17 @@ class Main
     if matches == 0
       return "NO MATCH"
     elsif matches == 1
-      return result
+      return current_name
     else
       
-      if string.split.length == 1
+      if command.split.length == 1
         return "NO MATCH"
       else
-        return check(string, list, (depth + 1))
+        return check(command, names, (depth + 1))
       end
     end
   end
 end
 
-macros = Macros.new
-puts "#{macros.roll("4d8")}"
+puts "#{Macros.hit(5)}"
 # Main.new.run
