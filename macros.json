@@ -1,0 +1,34 @@
+{
+  "foo bar": {
+    "str": 10,
+    "dex": 10,
+    "con": 12,
+    "int": 13,
+    "wis": 17,
+    "cha": 13,
+    "spell_save": 13,
+    "spell_hit_mod": 5,
+    "spells": ["sacred flame", "thaumaturgy"],
+    "actions": {
+      "Mace": [2, "1d6", "bludgeoning"],
+      "Guiding Bolt": [5, "4d6", "radiant"]
+    }
+  },
+  "foo foo": {
+    "str": 10,
+    "dex": 10,
+    "con": 12,
+    "int": 13,
+    "wis": 17,
+    "cha": 13,
+    "spell_save": 13,
+    "spell_hit_mod": 5,
+    "spells": ["sacred flame", "thaumaturgy"],
+    "actions": {
+      "Mace": [2, "1d6", "bludgeoning"],
+      "Guiding Bolt": [5, "4d6", "radiant"]
+    }
+  }
+}
+
+
