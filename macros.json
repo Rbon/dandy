@@ -1,5 +1,5 @@
 {
-  "foo bar": {
+  "Sahuagin Priestess": {
     "str": 10,
     "dex": 10,
     "con": 12,
@@ -14,7 +14,7 @@
       "Guiding Bolt": [5, "4d6", "radiant"]
     }
   },
-  "foo foo": {
+  "Sahuagin": {
     "str": 10,
     "dex": 10,
     "con": 12,

@@ -1,5 +1,5 @@
 ##
-# TODO: crits
+# TODO: support for varying string length for arrays searched using get_name
 
 require "json"
 
@@ -133,8 +133,8 @@ class Main
     end
   end
   
-  # Parses the beginning of a String, and tries to interpret what item in a
-  # Array it is referring to. (Ugh. Maybe make a better description.)
+  # Determine if a String begins with any item in an Array of Strings.
+  #   Auto-complete words.
   #
   # command - The String that will be parsed.
   # names   - The Array of Strings that the command will be checked against.
@@ -144,36 +144,39 @@ class Main
   #
   # Examples
   #
-  #   check("knight sword", ["knight", "priest"])
+  #   check("knight roll 1d6", ["knight", "priest"])
   #   # => ["knight", "roll 1d6"]
   #
-  #   check("kni sw")
+  #   check("kni roll 1d6", ["knight", "priest"])
+  #   # => ["knight", "roll 1d6"]
   #
-  def check(command, names, depth = 0)
-    matches = 0
-    current_name = nil
-    
+  # Returns the matching item, and the remainder of command, but only if one
+  #   match is found. Returns "NO MATCH" for 0 matches or "INCONCLUSIVE" for
+  #   any number of matches more than 1.
+  def get_name(command, names, depth = 0)
+    word = command.split[0]
+    matches = []
+  
     names.each do |name|
-      if name.start_with?(command.split[0..depth].join(" "))
-        current_name = name
-        matches += 1
+      if name.split[depth..-1].join(" ").start_with?(word)
+        matches << name
       end
     end
     
-    if matches == 0
+    if matches.length == 0
       return "NO MATCH"
-    elsif matches == 1
-      return current_name
+    elsif matches.length == 1
+      return matches * " ", command.sub(word, "").lstrip
     else
-      
-      if command.split.length == 1
-        return "NO MATCH"
+      if command.split.length == 1 # avoids infinite recursion
+        return "INCONCLUSIVE"
       else
-        return check(command, names, (depth + 1))
+        return get_name(command.sub(word, ""), matches, depth + 1)
       end
     end
   end
 end
 
-puts "#{Macros.hit(5)}"
-# Main.new.run
+
+# puts Macros.hit(3)
+Main.new.run
