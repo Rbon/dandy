@@ -1,7 +1,10 @@
-##
-# TODO: Support for varying string length for arrays searched using get_phrase.
-#       Logging.
-#       Hard-coded commands that don't require a creature as first phrase.
+# TODO:
+#   Support for varying string length for arrays searched using get_phrase.
+#   Logging.
+#   Commands that don't require a creature as first phrase.
+#   Exclude unneeded modifiers in roll output.
+#   Write a better description for get_phrase.
+#   Fix Main.run.
 
 require "json"
 
@@ -22,17 +25,26 @@ class Macros
   # Returns an Array with two items--an Integer sum of the rolls, and an
   #   Array of the individual roll Integers.
   def self.roll(notation)
-    notation = notation.split("d")
+    notation = notation.delete(" ").split("d")
+    count = notation[0]
+    faces = notation[1].split("+")
     dice     = []
     sum      = 0
+   
+    if faces[1]
+      mod = faces[1].to_i
+      sum += mod
+    else
+      mod = 0
+    end
     
-    (1..notation[0].to_i).each do
-      result = rand(1..notation[1].to_i)
+    (1..count.to_i).each do
+      result = rand(1..faces[0].to_i)
       dice << result
       sum += result
     end
     
-    return sum, dice
+    return sum, dice, mod
   end
   
   # Rolls to hit, i.e. 1d20 + attack mod.
@@ -74,7 +86,7 @@ class Macros
     result = roll(action.info[1])
     return "#{creature.name} uses #{action.name}\n"\
            "#{hit(action.info[0])}\n"\
-           "#{result[0]} #{action.info[2]} damage | #{result[1]}"
+           "#{result[0]} #{action.info[2]} damage | #{result[1]} + #{result[2]}"
   end
 end
 
@@ -146,75 +158,110 @@ class Main
         @creatures[name.downcase] = Creature.new(name, info)
       end
     end
-  
+    
   def run
     while true do
       print " > "
-      command = gets.chomp.downcase
+      command = gets.rstrip!.downcase
       
-      if command == "quit"
+      case command.split[0]
+      when "quit"
         exit
-        
+      when "roll"
+        puts Macros.roll(command.split[1..-1].join)
+      when "hit"
+        puts Macros.hit(command.split[1].to_i)
+      
       else
-        first_pass = get_phrase(command, @creatures.keys)
-        
-        if first_pass.class == Array
-          creature = @creatures[first_pass[0]]
-          second_pass = get_phrase(first_pass[1], creature.actions.keys)
+        creature, remainder = get_phrase(command, @creatures.keys)
+        creature = @creatures[first_pass[0]]
+          second_pass = expand(first_pass[1], creature.actions.keys)
           
           if second_pass.class == Array
             action = creature.actions[second_pass[0]]
-            puts Macros.macro(creature, action) + "\n\n"
+            puts Macros.macro(creature, action)
           end
         end
       end
+      
+      puts
+      
     end
   end
   
-  # Determine if a String begins with any item in an Array of Strings.
-  #   Auto-complete words. Does not ignore case.
+  # Does more magic than you can comprehend. Shits out the phrase that you
+  #   actually meant to type.
   #
   # command - A String that will be parsed.
   # phrases - An Array of Strings that the command will be checked against.
-  # depth   - An Integer of how many words at the start of the command should be
-  #           checked. This number is automatically incremeneted as the method
-  #           recurses, and should not be set manually.
   #
   # Examples
   #
-  #   check("knight roll 1d6", ["knight", "priest"])
+  #   check("fo baz", ["foo bar"])
+  #   # => ["foo bar", "baz"]
+  #
+  #   check("k roll 1d6", ["knight", "priest"])
   #   # => ["knight", "roll 1d6"]
   #
-  #   check("kni roll 1d6", ["knight", "priest"])
-  #   # => ["knight", "roll 1d6"]
-  #
-  # Returns an Array containing the matching item, and the remainder of command
-  #   if one match is found.
-  #   Returns "NO MATCH" for 0 matches.
-  #   Returns "TOO MANY MATCHES" for any number of matches greater than 1.
-  def get_phrase(command, phrases, depth = 0)
-    word = command.split[depth]
-    matches = []
-  
+  # Returns an Array with two items; either a String of the matched phrase or an
+  #   empty String if no conclusive match is found, and a String of the
+  #   unmatched remainder of the command.
+  def get_phrase(command, phrases)
+    result = [""]
+    
+    tmp = []
     phrases.each do |phrase|
-      if phrase.split[depth..-1].join(" ").start_with?(word)
-        matches << phrase
+      tmp.push(phrase.split)
+    end
+  
+    # I have no idea how this line works
+    rotated = Array.new(tmp.map(&:length).max){|i| tmp.map{|e| e[i]}}
+    
+    rotated.each do |phrase|
+      candidate = nil
+      candidate_count = 0
+      
+      phrase.each do |phrase_word|
+        command_word = command.split[rotated.index(phrase)]
+        
+        if phrase_word and command_word
+          if phrase_word.start_with?(command_word)
+            if candidate != phrase_word
+              candidate = phrase_word
+              candidate_count += 1
+            end
+          end
+        end
+      end
+      
+      if candidate_count == 1
+        result[0] += candidate + " "
       end
     end
     
-    if matches.length == 0
-      return "NO MATCH"
+    result[0].rstrip!
+    result.push(command.split[result[0].split.length..-1].join(" "))
+    
+    if not phrases.include?(result[0])
+      candidate = nil
+      candidate_count = 0
       
-    elsif matches.length == 1
-      return matches * " ", command.split[depth + 1..-1].join(" ")
+      phrases.each do |phrase|
+        if phrase.start_with?(result[0])
+          candidate = phrase
+          candidate_count += 1
+        end
+      end
       
-    else
-      if command.split.length == 1 # avoids infinite recursion
-        return "TOO MANY MATCHES"
+      if candidate_count == 1
+        result[0] = candidate
       else
-        return get_phrase(command, matches, depth + 1)
+        result[0] = ""
+        result[1] = command
       end
     end
+    
+    return result
   end
 end
 
