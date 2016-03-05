@@ -163,7 +163,7 @@ class Main
     while true do
       print " > "
       command = gets.rstrip!.downcase
-      
+
       case command.split[0]
       when "quit"
         exit
@@ -174,11 +174,11 @@ class Main
       
       else
         creature, remainder = get_phrase(command, @creatures.keys)
-        creature = @creatures[first_pass[0]]
-          second_pass = expand(first_pass[1], creature.actions.keys)
-          
-          if second_pass.class == Array
-            action = creature.actions[second_pass[0]]
+        creature = @creatures[creature]
+        if creature
+          action = get_phrase(remainder, creature.actions.keys)[0]
+          action = creature.actions[action]
+          if action
             puts Macros.macro(creature, action)
           end
         end
@@ -208,7 +208,6 @@ class Main
   #   unmatched remainder of the command.
   def get_phrase(command, phrases)
     result = [""]
-    
     tmp = []
     phrases.each do |phrase|
       tmp.push(phrase.split)
