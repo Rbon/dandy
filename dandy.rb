@@ -1,10 +1,10 @@
 # TODO:
-#   Support for varying string length for arrays searched using get_phrase.
-#   Logging.
-#   Commands that don't require a creature as first phrase.
 #   Exclude unneeded modifiers in roll output.
 #   Write a better description for get_phrase.
-#   Rename project to "dandy"
+#   Combat advantage and disadvantage.
+#   Rolls for init.
+#   Better a la carte dicerolls.
+
 require "json"
 
 # Methods that allow for dice rolls, with common roll types having their own
@@ -14,7 +14,7 @@ class Macros
 
   # Makes a speudorandom dice roll of any arbitrary count and faces.
   #
-  # notation - A dice notation, such as 1d6, as a String.
+  # notation - the dice notation, as a String.
   #
   # Examples
   #
@@ -75,31 +75,19 @@ class Macros
     end
       
     return result
-    
-    # if result == 20
-    #   crit_roll = hit
-    # end
   end
-  
-  # def self.macro(creature, action)
-  #   result = roll(action.info[1])
-  #   return "#{creature.name} uses #{action.name}\n"\
-  #         "#{hit(action.info[0])}\n"\
-  #         "#{result[0]} #{action.info[2]} damage | #{result[1]} + #{result[2]}"
-  # end
 end
 
-# A character sheet, basically. Contains no methods that are useful for
-#   anything but setting initial values.
+# A character sheet, basically. Automatically creates lambdas for every action
+#   the creature can take, derived from the macros file.
 class Creature
   attr_reader :macros
   
-  # Initialize a Creature.
+  # Initializes a Creature.
   #
   # name - A String that will be set as the creature's name, and displayed as
   #        part of actions rolled.
-  # info - An Array of Strings denoting ability scores, actions, and other
-  #        nessisary data.
+  # info - An Array of ability scores, actions, and other nessisary data.
   def initialize(name, info)
     @name    = name
     @macros = { }
@@ -126,7 +114,6 @@ class Creature
   end
 end
 
-
 # The class which contains the main loop, as well as other methods nessicary
 #   for running the script.
 class Main
@@ -149,9 +136,9 @@ class Main
       when "quit"
         exit
       when "roll"
-        puts Macros.roll(command.split[1..-1].join)
+        display(Macros.roll(command.split[1..-1].join))
       when "hit"
-        puts Macros.hit(command.split[1].to_i)
+        display(Macros.hit(command.split[1].to_i))
       
       else
         creature, remainder = get_phrase(command, @creatures.keys)
@@ -160,15 +147,22 @@ class Main
           action = get_phrase(remainder, creature.macros.keys)[0]
           action = creature.macros[action]
           if action
-            puts action.call
+            display(action.call)
           end
         end
       end
       
       puts
-      
     end
   end
+  
+  def display(text)
+    file = File.new("log.txt", "a")
+    file.write(text + "\n\n")
+    file.close
+    puts text
+  end
+    
   
   # Does more magic than you can comprehend. Shits out the phrase that you
   #   actually meant to type.
@@ -181,8 +175,8 @@ class Main
   #   check("fo baz", ["foo bar"])
   #   # => ["foo bar", "baz"]
   #
-  #   check("k roll 1d6", ["knight", "priest"])
-  #   # => ["knight", "roll 1d6"]
+  #   check("d roll 1d6", ["dragon knight", "priest"])
+  #   # => ["dragon knight", "roll 1d6"]
   #
   # Returns an Array with two items; either a String of the matched phrase or an
   #   empty String if no conclusive match is found, and a String of the
