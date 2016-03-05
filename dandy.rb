@@ -1,12 +1,7 @@
 # TODO:
-#   HIGH PRIORITY:
-#     Combat advantage and disadvantage.
-#
-#   MID PRIORITY:
-#     Write a better description for Main.get_phrase.
-#
-#   LOW PRIORITY:
-#     Rolls for init.
+#   Write a better description for get_phrase.
+#   "Again" command.
+#   Spells.
 
 # BUGS:
 #   Commas sometimes fuck with get_phrase.
@@ -146,6 +141,12 @@ class Creature
             "#{roll[0]} #{roll[1]}"
         end
       end
+    end
+    
+    @macros["roll initiative"] = lambda do |junk|
+      roll = Macros.roll_dice("1d20 + #{(info["dex"] - 10) / 2}")
+      return "#{@name} rolls Initiative\n"\
+        "#{roll[0]} #{roll[1]}"
     end
   end
 end
