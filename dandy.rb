@@ -100,7 +100,7 @@ class Macros
   end
   
   def self.user_roll(notation)
-    if /^[1-9]+d[1-9]*($| ?[\+\-] ?[1-9]+$)/.match(notation)
+    if /^[1-9]+[0-9]*d[1-9]+[0-9]*($| ?[\+\-] ?[1-9]+[0-9]*$)/.match(notation)
       roll = Macros.roll_dice(notation)
       return "#{roll[0]} #{roll[1]}"
     else
