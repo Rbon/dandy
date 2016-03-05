@@ -1,13 +1,15 @@
 # TODO:
 #   HIGH PRIORITY:
+#     Combat advantage and disadvantage.
 #
 #   MID PRIORITY:
-#     Exclude unneeded modifiers in roll output.
-#     Write a better description for get_phrase.
+#     Write a better description for Main.get_phrase.
 #
 #   LOW PRIORITY:
 #     Rolls for init.
-#     Combat advantage and disadvantage.
+
+# BUGS:
+#   Commas sometimes fuck with get_phrase.
 
 require "json"
 
@@ -15,7 +17,6 @@ require "json"
 #   methods. All methods are module methods and should be called on the Macros
 #   module.
 class Macros
-
   # Makes a speudorandom dice roll of any arbitrary count, faces, and modifiers.
   #
   # notation - the dice notation, as a String.
@@ -73,22 +74,33 @@ class Macros
   #   # => 16 to hit [14 + 2]
   #
   # Returns a multiple-line String detailing how the roll went.
-  def self.hit(attack_mod)
+  def self.hit(attack_mod, advantage = nil)
     result = ""
     roll = roll_dice("1d20 + #{attack_mod}")
     result += "#{roll[0]} to hit #{roll[1]}"
     
-    if roll == 20
+    if roll[0] == 20 + attack_mod
       result += "\nRolling to confirm crit...\n"
-      roll = rand(1..20)
-      result += "#{roll[0]} to hit #{roll[1]}"
+      result += hit(attack_mod)
       
-    elsif roll == 1
+    elsif roll[0] == 1 + attack_mod
       result += "\nRolling to confirm fumble...\n"
-      roll = rand(1..20)
-      result += "#{roll[0]} to hit #{roll[1]}"
+      result += hit(attack_mod)
     end
-      
+    
+    if advantage
+      advantage = Main.get_phrase(advantage, ["advantage", "disadvantage"])[0]
+      case advantage
+      when "advantage"
+        result += "\nRolling for advantage...\n"
+        result += hit(attack_mod)
+      when "disadvantage"
+        result += "\nRolling for disadvantage...\n"
+        result += hit(attack_mod)
+      end
+    end
+    
+    
     return result
   end
   
@@ -117,10 +129,10 @@ class Creature
     @macros = { }
     
     info["actions"].each do |name, info|
-      @macros[name.downcase] = lambda do
+      @macros[name.downcase] = lambda do |advantage = nil|
         roll = Macros.roll_dice(info[1])
         return "#{@name} uses #{name}\n"\
-          "#{Macros.hit(info[0])}\n"\
+          "#{Macros.hit(info[0], advantage)}\n"\
           "#{roll[0]} #{info[2]} damage #{roll[1]}"
       end
     end
@@ -128,7 +140,7 @@ class Creature
     info.each do |key, value|
       case key
       when "str", "dex", "con", "int", "wis", "cha"
-        @macros["roll " + key] = lambda do
+        @macros["roll " + key] = lambda do |junk|
           roll = Macros.roll_dice("1d20 + #{(value - 10) / 2}")
           return "#{@name} rolls #{key.upcase}\n"\
             "#{roll[0]} #{roll[1]}"
@@ -151,8 +163,9 @@ class Main
       end
       
       @macros = {
-        "roll" => lambda { |notation| Macros.user_roll(notation) },
-        "quit" => lambda { |junk| quit(junk) }
+        "roll"  => lambda { |notation| Macros.user_roll(notation) },
+        # "again" => lambda { |junk| Macros.again}
+        "quit"  => lambda { |junk| quit(junk) }
       }
       
     end
@@ -162,20 +175,20 @@ class Main
       print " > "
       command = gets.rstrip!.downcase
 
-      action, remainder = get_phrase(command, @macros.keys)
+      action, remainder = Main.get_phrase(command, @macros.keys)
       action = @macros[action]
       
       if action
         display(action.call(remainder))
       
       else
-        creature, remainder = get_phrase(command, @creatures.keys)
+        creature, remainder = Main.get_phrase(command, @creatures.keys)
         creature = @creatures[creature]
         if creature
-          action = get_phrase(remainder, creature.macros.keys)[0]
+          action, remainder = Main.get_phrase(remainder, creature.macros.keys)
           action = creature.macros[action]
           if action
-            display(action.call)
+            display(action.call(remainder))
           end
         end
       end
@@ -208,7 +221,7 @@ class Main
   # Returns an Array with two items; either a String of the matched phrase or an
   #   empty String if no conclusive match is found, and a String of the
   #   unmatched remainder of the command.
-  def get_phrase(command, phrases)
+  def self.get_phrase(command, phrases)
     result = [""]
     tmp = []
     phrases.each do |phrase|

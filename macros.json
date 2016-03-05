@@ -23,7 +23,7 @@
       "Bite": [2, "1d6", "bludgeoning"],
       "Claws": [3, "1d4 +1", "slashing"],
       "Spear": [3, "1d6 + 1", "piercing"],
-      "Spear, Two Handed": [3, "1d8 + 1", "piercing"]
+      "Spear Two Handed": [3, "1d8 + 1", "piercing"]
     }
   },
   "Giant Octopus": {
