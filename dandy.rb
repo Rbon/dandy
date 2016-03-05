@@ -1,9 +1,13 @@
 # TODO:
-#   Exclude unneeded modifiers in roll output.
-#   Write a better description for get_phrase.
-#   Combat advantage and disadvantage.
-#   Rolls for init.
-#   Better a la carte dicerolls.
+#   HIGH PRIORITY:
+#
+#   MID PRIORITY:
+#     Exclude unneeded modifiers in roll output.
+#     Write a better description for get_phrase.
+#
+#   LOW PRIORITY:
+#     Rolls for init.
+#     Combat advantage and disadvantage.
 
 require "json"
 
@@ -12,38 +16,49 @@ require "json"
 #   module.
 class Macros
 
-  # Makes a speudorandom dice roll of any arbitrary count and faces.
+  # Makes a speudorandom dice roll of any arbitrary count, faces, and modifiers.
   #
   # notation - the dice notation, as a String.
   #
   # Examples
   #
-  #   roll("4d8")
-  #   # => [13, [7, 2, 1, 3]]
+  #   roll("4d8 + 2")
+  #   # => [16, "| [4, 3, 1, 6] + 2"]
   #
-  # Returns an Array with two items--an Integer sum of the rolls, and an
-  #   Array of the individual roll Integers.
-  def self.roll(notation)
-    notation = notation.delete(" ").split("d")
-    count = notation[0]
-    faces = notation[1].split("+")
-    dice     = []
-    sum      = 0
-   
-    if faces[1]
-      mod = faces[1].to_i
-      sum += mod
-    else
-      mod = 0
+  # Returns an Array with two items--an Integer sum of the rolls, and a nicely
+  #   formatted String of individual rolls, and the modifier, if there was one.
+  def self.roll_dice(notation)
+    sum = 0
+    operator = nil
+    mod = nil
+    count, faces = notation.delete(" ").split("d")
+    rolls = []
+    
+    ["+","-"].each do |symbol|
+      if faces.include?(symbol)
+        faces, mod = faces.split(symbol)
+        operator = symbol
+      end
     end
     
     (1..count.to_i).each do
-      result = rand(1..faces[0].to_i)
-      dice << result
-      sum += result
+      roll = rand(1..faces.to_i)
+      rolls << roll
+      sum  += roll
     end
     
-    return sum, dice, mod
+    rolls = "| #{rolls}"
+    
+    case operator
+    when "+"
+      sum += mod.to_i
+      rolls += " + #{mod}"
+    when "-"
+      sum -= mod.to_i
+      rolls += " - #{mod}"
+    end
+    
+    return sum, rolls
   end
   
   # Rolls to hit, i.e. 1d20 + attack mod.
@@ -60,21 +75,30 @@ class Macros
   # Returns a multiple-line String detailing how the roll went.
   def self.hit(attack_mod)
     result = ""
-    roll = rand(1..20)
-    result += "#{roll + attack_mod} to hit | [#{roll}] + #{attack_mod}"
+    roll = roll_dice("1d20 + #{attack_mod}")
+    result += "#{roll[0]} to hit #{roll[1]}"
     
     if roll == 20
       result += "\nRolling to confirm crit...\n"
       roll = rand(1..20)
-      result += "#{roll + attack_mod} to hit | [#{roll}] + #{attack_mod}"
+      result += "#{roll[0]} to hit #{roll[1]}"
       
     elsif roll == 1
       result += "\nRolling to confirm fumble...\n"
       roll = rand(1..20)
-      result += "#{roll + attack_mod} to hit | [#{roll}] + #{attack_mod}"
+      result += "#{roll[0]} to hit #{roll[1]}"
     end
       
     return result
+  end
+  
+  def self.user_roll(notation)
+    if /^[1-9]+d[1-9]*($| ?[\+\-] ?[1-9]+$)/.match(notation)
+      roll = Macros.roll_dice(notation)
+      return "#{roll[0]} #{roll[1]}"
+    else
+      return "BAD NOTATION"
+    end
   end
 end
 
@@ -89,15 +113,15 @@ class Creature
   #        part of actions rolled.
   # info - An Array of ability scores, actions, and other nessisary data.
   def initialize(name, info)
-    @name    = name
+    @name   = name
     @macros = { }
     
     info["actions"].each do |name, info|
       @macros[name.downcase] = lambda do
-        damage = Macros.roll(info[1])
+        roll = Macros.roll_dice(info[1])
         return "#{@name} uses #{name}\n"\
           "#{Macros.hit(info[0])}\n"\
-          "#{damage[0]} #{info[2]} damage | #{damage[1]} + #{damage[2]}"
+          "#{roll[0]} #{info[2]} damage #{roll[1]}"
       end
     end
     
@@ -105,9 +129,9 @@ class Creature
       case key
       when "str", "dex", "con", "int", "wis", "cha"
         @macros["roll " + key] = lambda do
-          dice_roll = Macros.roll("1d20 + #{(value - 10) / 2}")
-          return "#{@name} rolls #{key} for #{dice_roll[0]} "\
-            "| #{dice_roll[1]} + #{dice_roll[2]}"
+          roll = Macros.roll_dice("1d20 + #{(value - 10) / 2}")
+          return "#{@name} rolls #{key.upcase}\n"\
+            "#{roll[0]} #{roll[1]}"
         end
       end
     end
@@ -125,6 +149,12 @@ class Main
       file_hash.each do |name, info|
         @creatures[name.downcase] = Creature.new(name, info)
       end
+      
+      @macros = {
+        "roll" => lambda { |notation| Macros.user_roll(notation) },
+        "quit" => lambda { |junk| quit(junk) }
+      }
+      
     end
     
   def run
@@ -132,13 +162,11 @@ class Main
       print " > "
       command = gets.rstrip!.downcase
 
-      case command.split[0]
-      when "quit"
-        exit
-      when "roll"
-        display(Macros.roll(command.split[1..-1].join))
-      when "hit"
-        display(Macros.hit(command.split[1].to_i))
+      action, remainder = get_phrase(command, @macros.keys)
+      action = @macros[action]
+      
+      if action
+        display(action.call(remainder))
       
       else
         creature, remainder = get_phrase(command, @creatures.keys)
@@ -158,12 +186,11 @@ class Main
   
   def display(text)
     file = File.new("log.txt", "a")
-    file.write(text + "\n\n")
+    file.write("#{text} \n\n")
     file.close
     puts text
   end
     
-  
   # Does more magic than you can comprehend. Shits out the phrase that you
   #   actually meant to type.
   #
@@ -237,6 +264,11 @@ class Main
     
     return result
   end
+  
+  def quit(junk)
+    exit
+  end
+  
 end
 
 Main.new.run

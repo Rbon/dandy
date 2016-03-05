@@ -1,43 +1,40 @@
 {
   "Sahuagin Priestess": {
-    "str": 10,
-    "dex": 10,
+    "str": 13,
+    "dex": 11,
     "con": 12,
-    "int": 13,
-    "wis": 17,
+    "int": 12,
+    "wis": 14,
     "cha": 13,
-    "spell_save": 13,
-    "spell_hit_mod": 5,
-    "spells": ["sacred flame", "thaumaturgy"],
     "actions": {
-      "Mace": [2, "1d6", "bludgeoning"],
-      "Guiding Bolt": [5, "4d6", "radiant"]
-    }
-  },  "Sahuagin": {
-    "str": 10,
-    "dex": 10,
-    "con": 12,
-    "int": 13,
-    "wis": 17,
-    "cha": 13,
-    "spell_save": 13,
-    "spell_hit_mod": 5,
-    "spells": ["sacred flame", "thaumaturgy"],
-    "actions": {
-      "Mace": [2, "1d6", "bludgeoning"],
+      "Bite": [2, "1d6", "bludgeoning"],
+      "Claws": [3, "1d4 +1", "slashing"],
       "Guiding Bolt": [5, "4d6", "radiant"]
     }
   },
-  "Giant Crocodile": {
-    "str": 21,
-    "dex": 9,
-    "con": 17,
-    "int": 2,
-    "wis": 10,
-    "cha": 7,
+  "Sahuagin": {
+    "str": 13,
+    "dex": 11,
+    "con": 12,
+    "int": 12,
+    "wis": 13,
+    "cha": 9,
     "actions": {
-      "Bite": [8, "3d10 + 5", "piercing"],
-      "Tail": [8, "2d8 + 5", "bludgeoning"]
+      "Bite": [2, "1d6", "bludgeoning"],
+      "Claws": [3, "1d4 +1", "slashing"],
+      "Spear": [3, "1d6 + 1", "piercing"],
+      "Spear, Two Handed": [3, "1d8 + 1", "piercing"]
+    }
+  },
+  "Giant Octopus": {
+    "str": 17,
+    "dex": 13,
+    "con": 13,
+    "int": 4,
+    "wis": 10,
+    "cha": 4,
+    "actions": {
+      "Tantacles": [5, "2d6 + 3", "bludgeoning"]
     }
   }
 }
