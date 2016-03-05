@@ -82,69 +82,53 @@ class Macros
     # end
   end
   
-  def self.macro(creature, action)
-    result = roll(action.info[1])
-    return "#{creature.name} uses #{action.name}\n"\
-           "#{hit(action.info[0])}\n"\
-           "#{result[0]} #{action.info[2]} damage | #{result[1]} + #{result[2]}"
-  end
+  # def self.macro(creature, action)
+  #   result = roll(action.info[1])
+  #   return "#{creature.name} uses #{action.name}\n"\
+  #         "#{hit(action.info[0])}\n"\
+  #         "#{result[0]} #{action.info[2]} damage | #{result[1]} + #{result[2]}"
+  # end
 end
 
 # A character sheet, basically. Contains no methods that are useful for
 #   anything but setting initial values.
 class Creature
-  attr_reader :str_mod, :dex_mod, :con_mod, :int_mod, :wis_mod, :cha_mod,
-              :actions, :name
-              
+  attr_reader :macros
+  
   # Initialize a Creature.
   #
-  # name - A String that will be displayed as part of actions rolled.
+  # name - A String that will be set as the creature's name, and displayed as
+  #   part of actions rolled.
   # info - An Array of Strings denoting ability scores, actions, and other
   #        nessisary data.
   def initialize(name, info)
     @name    = name
-    @str     = info["str"]
-    @dex     = info["dex"]
-    @con     = info["con"]
-    @int     = info["int"]
-    @wis     = info["wis"]
-    @cha     = info["cha"]
-    @str_mod = mod(@str)
-    @dex_mod = mod(@dex)
-    @con_mod = mod(@con)
-    @int_mod = mod(@int)
-    @wis_mod = mod(@wis)
-    @cha_mod = mod(@cha)
-    @actions = { }
+    @macros = { }
     
     info["actions"].each do |name, info|
-      @actions[name.downcase] = Action.new(name, info)
+      @macros[name.downcase] = lambda do
+        damage = Macros.roll(info[1])
+        return "#{@name} uses #{name}\n"\
+          "#{Macros.hit(info[0])}\n"\
+          "#{damage[0]} #{info[2]} damage | #{damage[1]} + #{damage[2]}"
+      end
     end
-  end
-  
-  # Get an ability modifier.
-  #
-  # ability - The ability score as an Integer.
-  #
-  # Examples
-  #
-  #   mod(15)
-  #   # => 2
-  #
-  # Returns the modifier as an Integer.
-  def mod(ability)
-    return (ability - 10) / 2
+    
+    info.each do |key, value|
+      case key
+      when "str", "dex", "con", "int", "wis", "cha"
+        @macros["roll " + key] = lambda do
+          dice_roll = Macros.roll("1d20 + #{(value - 10) / 2}")
+          return "#{@name} rolls #{key} for #{dice_roll[0]} "\
+            "| #{dice_roll[1]} + #{dice_roll[2]}"
+        end
+      end
+    end
+    
+    # puts @macros.inspect
   end
 end
 
-# An action that a Creature can take.
-class Action
-  attr_reader :name, :info
-  def initialize(name, info)
-    @name = name
-    @info = info
-  end
-end
 
 # The class which contains the main loop, as well as other methods nessicary
 #   for running the script.
@@ -176,10 +160,10 @@ class Main
         creature, remainder = get_phrase(command, @creatures.keys)
         creature = @creatures[creature]
         if creature
-          action = get_phrase(remainder, creature.actions.keys)[0]
-          action = creature.actions[action]
+          action = get_phrase(remainder, creature.macros.keys)[0]
+          action = creature.macros[action]
           if action
-            puts Macros.macro(creature, action)
+            puts action.call
           end
         end
       end
@@ -265,3 +249,12 @@ class Main
 end
 
 Main.new.run
+
+# # An action that a Creature can take.
+# class Action
+#   attr_reader :name, :info
+#   def initialize(name, info)
+#     @name = name
+#     @info = info
+#   end
+# end
