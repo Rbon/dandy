@@ -1,40 +1,25 @@
 {
-  "Sahuagin Priestess": {
-    "str": 13,
-    "dex": 11,
-    "con": 12,
-    "int": 12,
-    "wis": 14,
-    "cha": 13,
+  "Rakshasa": {
+    "str": 14,
+    "dex": 17,
+    "con": 18,
+    "int": 13,
+    "wis": 16,
+    "cha": 20,
     "actions": {
-      "Bite": [2, "1d6", "bludgeoning"],
-      "Claws": [3, "1d4 +1", "slashing"],
-      "Guiding Bolt": [5, "4d6", "radiant"]
+      "Claw": [7, "2d6", "slashing"]
     }
   },
-  "Sahuagin": {
-    "str": 13,
+  "Sheriff": {
+    "str": 16,
     "dex": 11,
-    "con": 12,
-    "int": 12,
-    "wis": 13,
-    "cha": 9,
+    "con": 14,
+    "int": 11,
+    "wis": 11,
+    "cha": 15,
     "actions": {
-      "Bite": [2, "1d6", "bludgeoning"],
-      "Claws": [3, "1d4 +1", "slashing"],
-      "Spear": [3, "1d6 + 1", "piercing"],
-      "Spear Two Handed": [3, "1d8 + 1", "piercing"]
-    }
-  },
-  "Giant Octopus": {
-    "str": 17,
-    "dex": 13,
-    "con": 13,
-    "int": 4,
-    "wis": 10,
-    "cha": 4,
-    "actions": {
-      "Tantacles": [5, "2d6 + 3", "bludgeoning"]
+      "Greatsword": [5, "2d3 + 3", "slashing"],
+      "Heavy Crossbow": [2, "1d10", "piercing"]
     }
   }
 }
