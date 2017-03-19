@@ -309,6 +309,7 @@ class Main
     @output_buffer = ""
     @input_buffer = ""
     @running = true
+    @curs_pos = -1 ## used for String.insert
     @keys = {
       :tab => 9,
       :enter => 10,
@@ -354,9 +355,11 @@ class Main
       @input_window.setpos(0, 3 + (@input_buffer.length - 1))
       @input_buffer = @input_buffer[0..-2]
     when @keys[:left_arrow]
-      draw_output("Left arrow key.")
+      if @curs_pos > 0
+        @curs_pos -= 1
+      end
     else
-      @input_buffer << input.to_s
+      @input_buffer.insert(input, @curs_pos)
       draw_input(@input_buffer)
       @input_window.refresh
     end
