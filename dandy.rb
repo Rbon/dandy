@@ -5,8 +5,7 @@
 
 
 ## BUGS:
-## Un-numlock'd numberpad keys still insert text into the line editor, because
-## they make two keypresses somehow.
+## Un-numlock'd numberpad keys still insert text into the line editor, somehow.
 
 
 require "json"
@@ -309,18 +308,22 @@ class Main
   def initialize
     @output_buffer = ""
     @input_buffer = ""
+    @history = [""]
+    @history_pos = 0
     @running = true
     @curs_pos = 0
     @keys = {
       :tab => 9,
       :enter => 10,
       :ctrl_w => 23,
+      :down_arrow => 258,
+      :up_arrow => 259,
       :backspace => 263,
       :left_arrow => 260,
       :right_arrow => 261,
-      :normal_letters =>
+      :normal_keys =>
         "`1234567890-=qwertyuiop[]\\asdfghjkl;'zxcvbnm,./'`"\
-        "~!@\#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL:\"ZXCVBNM<>? ".split("")
+        "~!@\#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL:\"ZXCVBNM<>? ".split(""),
     }
 
     begin
@@ -344,17 +347,29 @@ class Main
 
   def handle_input(input)
     case input
+
     when @keys[:tab]
-      draw_output(@keys[:normal_letters].inspect)
+      draw_output(
+        "history_pos = #{@history_pos}\n"\
+        "history = #{@history}\n"
+      )
+
     when @keys[:ctrl_w]
       @running = false
+
     when @keys[:enter]
-      draw_output(@input_buffer)
-      @input_window.setpos(0, 3)
-      @input_window.addstr(" " * @input_buffer.length)
-      @input_window.setpos(0, 3)
-      @input_buffer = ""
-      @curs_pos = 0
+      if @input_buffer.length != 0
+        draw_output(@input_buffer)
+        clear_line
+        if @history.include?(@input_buffer)
+          @history.delete(@input_buffer)
+        end
+        @history.insert(1, @input_buffer)
+        @input_buffer = ""
+        @curs_pos = 0
+        @history_pos = 0
+      end
+
     when @keys[:backspace]
       if @curs_pos > 0
         @input_window.setpos(0, 3 + (@input_buffer.length - 1))
@@ -363,18 +378,33 @@ class Main
         @input_buffer = @input_buffer[0..-2]
         @curs_pos -= 1
       end
+
     when @keys[:left_arrow]
       if @curs_pos > 0
         @curs_pos -= 1
         @input_window.setpos(0, @curs_pos + 3)
       end
+
     when @keys[:right_arrow]
       if @curs_pos < @input_buffer.length
         @curs_pos += 1
         @input_window.setpos(0, @curs_pos + 3)
       end
+
+    when @keys[:up_arrow]
+      if @history_pos == @history.length - 1
+        @history_pos = 0
+        @curs_pos = 0
+      else
+        @history_pos += 1
+      end
+      clear_line
+      @input_window.addstr(@history[@history_pos])
+      @input_buffer = "" + @history[@history_pos]
+      @curs_pos = @input_buffer.length
+
     else
-      if @keys[:normal_letters].include?(input.to_s)
+      if @keys[:normal_keys].include?(input.to_s)
         @input_buffer.insert(@curs_pos, input.to_s)
         @input_window.setpos(0, 3)
         @input_window.addstr(@input_buffer)
@@ -385,6 +415,12 @@ class Main
         draw_output(input.to_s)
       end
     end
+  end
+
+  def clear_line
+    @input_window.setpos(0, 3)
+    @input_window.addstr(" " * @input_buffer.length)
+    @input_window.setpos(0, 3)
   end
 
   def draw_output(string)
