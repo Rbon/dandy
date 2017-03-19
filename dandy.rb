@@ -310,7 +310,7 @@ class Main
     @output_buffer = ""
     @input_buffer = ""
     @running = true
-    @curs_pos = 0 ## used for String.insert
+    @curs_pos = 0
     @keys = {
       :tab => 9,
       :enter => 10,
@@ -331,7 +331,7 @@ class Main
       term_h = Curses.lines - 1
       @input_window = Curses::Window.new(1, term_w, term_h, 0)
       @input_window.keypad = true
-      @output_window = Curses::Window.new(term_h - 1, term_w, 0, 0)
+      @output_window = Curses::Window.new(term_h, term_w, 0, 0)
       draw_output("Testing.")
       @input_window.addstr(" > ")
       while @running
@@ -381,6 +381,8 @@ class Main
         @curs_pos += 1
         @input_window.setpos(0, @curs_pos + 3)
         @input_window.refresh
+      else
+        draw_output(input.to_s)
       end
     end
   end
@@ -393,8 +395,13 @@ class Main
       delta = @output_buffer.length - @output_window.maxy
       @output_buffer = @output_buffer[delta..-1]
     end
+    if @output_buffer.length < @output_window.maxy
+      delta = @output_window.maxy - @output_buffer.length
+      @output_window.setpos(delta, 0)
+    else
+      @output_window.setpos(0, 0)
+    end
     @output_buffer = @output_buffer.join("\n") + "\n"
-    @output_window.setpos(0, 0)
     @output_window.addstr(@output_buffer)
     @output_window.refresh
     @input_window.refresh
