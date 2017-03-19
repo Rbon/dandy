@@ -306,10 +306,18 @@ end
 class Main
 
   def initialize
+    @output_buffer = ""
+    @input_buffer = ""
+    @running = true
+    @keys = {
+      :tab => 9,
+      :enter => 10,
+      :ctrl_w => 23,
+      :backspace => 263,
+      :left_arrow => 260
+    }
+
     begin
-      @output_buffer = ""
-      @input_buffer = ""
-      @running = true
       Curses.init_screen
       # Curses.curs_set(0) ## Invisible cursor
       Curses.noecho ## Don't display pressed characters
@@ -331,31 +339,32 @@ class Main
 
   def handle_input(input)
     case input
-    when 9 ## the tab key
+    when @keys[:tab]
       draw_output("Tab pressed.")
-    when 23 ## CTRL-w
+    when @keys[:ctrl_w]
       @running = false
-    else
-
-      ## do line editing
-      case input
-      when 10 ## enter key
-        @input_buffer = ""
-        @input_window.setpos(0, 0)
-        @input_window.addstr(" > #{" " * (@input_window.maxx - 3)}")
-        draw_output("New line.")
-      when 263 ## backspace
-        @input_window.setpos(0, 3)
-        @input_window.addstr(@BLANK_LINE)
-        @input_buffer = @input_buffer[0..-2]
-      else
-        @input_buffer << input.to_s
-      end
+    when @keys[:enter]
       @input_window.setpos(0, 3)
-      @input_window.addstr(@input_buffer)
+      @input_window.addstr(" " * @input_buffer.length)
+      @input_window.setpos(0, 3)
+      @input_buffer = ""
+    when @keys[:backspace]
+      @input_window.setpos(0, 3 + (@input_buffer.length - 1))
+      @input_window.addstr(" ")
+      @input_window.setpos(0, 3 + (@input_buffer.length - 1))
+      @input_buffer = @input_buffer[0..-2]
+    when @keys[:left_arrow]
+      draw_output("Left arrow key.")
+    else
+      @input_buffer << input.to_s
+      draw_input(@input_buffer)
       @input_window.refresh
-
     end
+  end
+
+  def draw_input(string)
+    @input_window.setpos(0, 3)
+    @input_window.addstr(string)
   end
 
   def draw_output(string)
@@ -367,16 +376,5 @@ class Main
 
 end
 
-Main.new
 
-# Curses.init_screen
-# begin
-  # x = Curses.cols / 2  # We will center our text
-  # y = Curses.lines / 2
-  # Curses.setpos(y, x)  # Move the cursor to the center of the screen
-  # Curses.addstr("Hello World")  # Display the text
-  # Curses.refresh  # Refresh the screen
-  # Curses.getch  # Waiting for a pressed key to exit
-# ensure
-  # Curses.close_screen
-# end
+Main.new
