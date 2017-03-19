@@ -309,13 +309,14 @@ class Main
     @output_buffer = ""
     @input_buffer = ""
     @running = true
-    @curs_pos = -1 ## used for String.insert
+    @curs_pos = 0 ## used for String.insert
     @keys = {
       :tab => 9,
       :enter => 10,
       :ctrl_w => 23,
       :backspace => 263,
-      :left_arrow => 260
+      :left_arrow => 260,
+      :right_arrow => 261
     }
 
     begin
@@ -324,7 +325,6 @@ class Main
       Curses.noecho ## Don't display pressed characters
       term_w = Curses.cols - 1
       term_h = Curses.lines - 1
-      @BLANK_LINE = " " * Curses.cols
       @input_window = Curses::Window.new(1, term_w, term_h, 0)
       @input_window.keypad = true
       @output_window = Curses::Window.new(term_h - 1, term_w, term_h - 1, 0)
@@ -349,18 +349,31 @@ class Main
       @input_window.addstr(" " * @input_buffer.length)
       @input_window.setpos(0, 3)
       @input_buffer = ""
+      @curs_pos = 0
     when @keys[:backspace]
-      @input_window.setpos(0, 3 + (@input_buffer.length - 1))
-      @input_window.addstr(" ")
-      @input_window.setpos(0, 3 + (@input_buffer.length - 1))
-      @input_buffer = @input_buffer[0..-2]
+      if @curs_pos > 0
+        @input_window.setpos(0, 3 + (@input_buffer.length - 1))
+        @input_window.addstr(" ")
+        @input_window.setpos(0, 3 + (@input_buffer.length - 1))
+        @input_buffer = @input_buffer[0..-2]
+        @curs_pos -= 1
+      end
     when @keys[:left_arrow]
       if @curs_pos > 0
         @curs_pos -= 1
+        @input_window.setpos(0, @curs_pos + 3)
+      end
+    when @keys[:right_arrow]
+      if @curs_pos < @input_buffer.length
+        @curs_pos += 1
+        @input_window.setpos(0, @curs_pos + 3)
       end
     else
-      @input_buffer.insert(input, @curs_pos)
-      draw_input(@input_buffer)
+      @input_buffer.insert(@curs_pos, input.to_s)
+      @input_window.setpos(0, 3)
+      @input_window.addstr(@input_buffer)
+      @curs_pos += 1
+      @input_window.setpos(0, @curs_pos + 3)
       @input_window.refresh
     end
   end
