@@ -4,8 +4,9 @@
 #   Spells. 
 
 
-# BUGS:
-#   Commas sometimes fuck with get_phrase.
+## BUGS:
+## Un-numlock'd numberpad keys still insert text into the line editor, because
+## they make two keypresses somehow.
 
 
 require "json"
@@ -316,7 +317,10 @@ class Main
       :ctrl_w => 23,
       :backspace => 263,
       :left_arrow => 260,
-      :right_arrow => 261
+      :right_arrow => 261,
+      :normal_letters =>
+        "`1234567890-=qwertyuiop[]\\asdfghjkl;'zxcvbnm,./'`"\
+        "~!@\#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL:\"ZXCVBNM<>? ".split("")
     }
 
     begin
@@ -327,7 +331,7 @@ class Main
       term_h = Curses.lines - 1
       @input_window = Curses::Window.new(1, term_w, term_h, 0)
       @input_window.keypad = true
-      @output_window = Curses::Window.new(term_h - 1, term_w, term_h - 1, 0)
+      @output_window = Curses::Window.new(term_h - 1, term_w, 0, 0)
       draw_output("Testing.")
       @input_window.addstr(" > ")
       while @running
@@ -341,10 +345,11 @@ class Main
   def handle_input(input)
     case input
     when @keys[:tab]
-      draw_output("Tab pressed.")
+      draw_output(@keys[:normal_letters].inspect)
     when @keys[:ctrl_w]
       @running = false
     when @keys[:enter]
+      draw_output(@input_buffer)
       @input_window.setpos(0, 3)
       @input_window.addstr(" " * @input_buffer.length)
       @input_window.setpos(0, 3)
@@ -369,23 +374,28 @@ class Main
         @input_window.setpos(0, @curs_pos + 3)
       end
     else
-      @input_buffer.insert(@curs_pos, input.to_s)
-      @input_window.setpos(0, 3)
-      @input_window.addstr(@input_buffer)
-      @curs_pos += 1
-      @input_window.setpos(0, @curs_pos + 3)
-      @input_window.refresh
+      if @keys[:normal_letters].include?(input.to_s)
+        @input_buffer.insert(@curs_pos, input.to_s)
+        @input_window.setpos(0, 3)
+        @input_window.addstr(@input_buffer)
+        @curs_pos += 1
+        @input_window.setpos(0, @curs_pos + 3)
+        @input_window.refresh
+      end
     end
   end
 
-  def draw_input(string)
-    @input_window.setpos(0, 3)
-    @input_window.addstr(string)
-  end
-
   def draw_output(string)
-    # @output_window.clear
-    @output_window.addstr(string)
+    string = string.scan(/.{1,#{@output_window.maxx-1}}/).join("\n")
+    @output_buffer << string
+    @output_buffer = @output_buffer.split("\n")
+    if @output_buffer.length > @output_window.maxy
+      delta = @output_buffer.length - @output_window.maxy
+      @output_buffer = @output_buffer[delta..-1]
+    end
+    @output_buffer = @output_buffer.join("\n") + "\n"
+    @output_window.setpos(0, 0)
+    @output_window.addstr(@output_buffer)
     @output_window.refresh
     @input_window.refresh
   end
