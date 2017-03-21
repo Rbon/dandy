@@ -321,6 +321,7 @@ class Main
       :backspace => 263,
       :left_arrow => 260,
       :right_arrow => 261,
+      :delete => 330,
       :normal_keys =>
         "`1234567890-=qwertyuiop[]\\asdfghjkl;'zxcvbnm,./'`"\
         "~!@\#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL:\"ZXCVBNM<>? ".split(""),
@@ -350,8 +351,7 @@ class Main
 
     when @keys[:tab]
       draw_output(
-        "history_pos = #{@history_pos}\n"\
-        "history = #{@history}\n"
+        "curs_pos = #{@curs_pos}"
       )
 
     when @keys[:ctrl_w]
@@ -372,11 +372,16 @@ class Main
 
     when @keys[:backspace]
       if @curs_pos > 0
-        @input_window.setpos(0, 3 + (@input_buffer.length - 1))
-        @input_window.addstr(" ")
-        @input_window.setpos(0, 3 + (@input_buffer.length - 1))
-        @input_buffer = @input_buffer[0..-2]
         @curs_pos -= 1
+        remove_character(@curs_pos)
+        @input_window.refresh
+      end
+
+    when @keys[:delete]
+      if @curs_pos < @input_buffer.length
+        remove_character(@curs_pos)
+        @input_window.refresh
+        @input_window.refresh
       end
 
     when @keys[:left_arrow]
@@ -394,7 +399,6 @@ class Main
     when @keys[:up_arrow]
       if @history_pos == @history.length - 1
         @history_pos = 0
-        @curs_pos = 0
       else
         @history_pos += 1
       end
@@ -410,6 +414,7 @@ class Main
         @input_window.addstr(@input_buffer)
         @curs_pos += 1
         @input_window.setpos(0, @curs_pos + 3)
+        # draw_output("Refreshing.")
         @input_window.refresh
       else
         draw_output(input.to_s)
@@ -421,6 +426,13 @@ class Main
     @input_window.setpos(0, 3)
     @input_window.addstr(" " * @input_buffer.length)
     @input_window.setpos(0, 3)
+  end
+
+  def remove_character(position)
+    @input_buffer.slice!(position)
+    @input_window.setpos(0, 3)
+    @input_window.addstr("#{@input_buffer} ")
+    @input_window.setpos(0, position + 3)
   end
 
   def draw_output(string)
