@@ -398,14 +398,17 @@ class Main
 
     when @keys[:up_arrow]
       if @history_pos == @history.length - 1
-        @history_pos = 0
+        access_history(0)
       else
-        @history_pos += 1
+        access_history(@history_pos + 1)
       end
-      clear_line
-      @input_window.addstr(@history[@history_pos])
-      @input_buffer = "" + @history[@history_pos]
-      @curs_pos = @input_buffer.length
+
+    when @keys[:down_arrow]
+      if @history_pos == 0
+        access_history(@history.length - 1)
+      else
+        access_history(@history_pos - 1)
+      end
 
     else
       if @keys[:normal_keys].include?(input.to_s)
@@ -420,6 +423,14 @@ class Main
         draw_output(input.to_s)
       end
     end
+  end
+
+  def access_history(position)
+    @history_pos = position
+    clear_line
+    @input_window.addstr(@history[@history_pos])
+    @input_buffer = String.new(@history[@history_pos])
+    @curs_pos = @input_buffer.length
   end
 
   def clear_line
