@@ -1,57 +1,12 @@
-# TODO:
-#   Write a better description for get_phrase.
-#   "Again" command.
-#   Spells. 
+## TODO:  Spells.
+##        Proper help text.
+##        Smarter tab completion.
 
-
-## BUGS:
-## Un-numlock'd numberpad keys still insert text into the line editor, somehow.
+## BUGS: Un-numlock'd numberpad keys still insert text into the line editor.
 
 
 require "json"
 require "curses"
-
-
-
-# class Creature
-  # attr_reader :macros
-
-  # # Initialize s a Creature.
-  # #
-  # # name - A String that will be set as the creature's name, and displayed as
-  # #        part of actions rolled.
-  # # info - An Array of ability scores, actions, and other nessisary data.
-  # def initi alize(name, info)
-    # @name   = name
-    # @macros = { }
-
-    # info[" actions"].each do |name, info|
-      # @macros[name.downcase] = lambda do |advantage = nil|
-        # roll = Actions.roll_dice(info[1])
-        # return "#{@name} uses #{name}\n"\
-          # "#{Actions.hit(info[0], advantage)}\n"\
-          # "#{roll[0]} #{info[2]} damage #{roll[1]}"
-      # end
-    # end
-
-    # info.each do |key, value|
-      # case key
-      # when "str", "dex", "con", "int", "wis", "cha"
-        # @macros["roll " + key] = lambda do |junk|
-          # roll = Actions.roll_dice("1d20 + #{(value - 10) / 2}")
-          # return "#{@name} results #{key.upcase}\n"\
-            # "#{roll[0]} #{roll[1]}"
-        # end
-      # end
-    # end
-
-    # @macros["roll initiative"] = lambda do |junk|
-      # roll = Actions.roll_dice("1d20 + #{(info["dex"] - 10) / 2}")
-      # return "#{@name} results Initiative\n"\
-        # "#{roll[0]} #{roll[1]}"
-    # end
-  # end
-# end
 
 
 class Main
@@ -81,7 +36,7 @@ class Main
       "roll" =>
         "roll 1d4 2d6+3"
     }
-
+    @commands = ["quit", "exit", "roll", "help"]
 
     begin
       Curses.init_screen
@@ -93,6 +48,11 @@ class Main
       @input_window.keypad = true
       @output_window = Curses::Window.new(term_h, term_w, 0, 0)
       @input_window.addstr(" > ")
+
+      ## causes the screen to flicker once at boot so it doesn't flicker again
+      @output_window.refresh
+      @input_window.refresh
+
       while @running
         handle_input(@input_window.getch)
       end
@@ -106,9 +66,19 @@ class Main
     case input
 
     when @keys[:tab]
-      draw_output(
-        "curs_pos = #{@curs_pos}"
-      )
+      current_word = @input_buffer.split(" ")[-1]
+      if current_word
+        @commands.each do |arg|
+          if arg.start_with?(current_word)
+            line = "#{@input_buffer.split(" ")[0..-2].join(" ")} #{arg} ".lstrip
+            clear_line
+            @input_window.addstr(line)
+            @input_buffer = String.new(line)
+            @curs_pos = @input_buffer.length
+            @input_window.refresh
+          end
+        end
+      end
 
     when @keys[:enter]
       if @input_buffer.length != 0
@@ -267,6 +237,9 @@ class Main
         display_usage
       end
 
+    when "help"
+      draw_output("Under construction.")
+
     else
       draw_output("No such command: #{@args[0]}")
     end
@@ -294,7 +267,6 @@ Main.new
 
 
 # class Actions
-
 
   # # Rolls to hit, i.e. 1d20 + attack mod.
   # #   Automatically re-results for crits and fumbles.
@@ -351,4 +323,44 @@ Main.new
     # exit
   # end
 
+# end
+
+# class Creature
+  # attr_reader :macros
+
+  # # Initialize s a Creature.
+  # #
+  # # name - A String that will be set as the creature's name, and displayed as
+  # #        part of actions rolled.
+  # # info - An Array of ability scores, actions, and other nessisary data.
+  # def initi alize(name, info)
+    # @name   = name
+    # @macros = { }
+
+    # info[" actions"].each do |name, info|
+      # @macros[name.downcase] = lambda do |advantage = nil|
+        # roll = Actions.roll_dice(info[1])
+        # return "#{@name} uses #{name}\n"\
+          # "#{Actions.hit(info[0], advantage)}\n"\
+          # "#{roll[0]} #{info[2]} damage #{roll[1]}"
+      # end
+    # end
+
+    # info.each do |key, value|
+      # case key
+      # when "str", "dex", "con", "int", "wis", "cha"
+        # @macros["roll " + key] = lambda do |junk|
+          # roll = Actions.roll_dice("1d20 + #{(value - 10) / 2}")
+          # return "#{@name} results #{key.upcase}\n"\
+            # "#{roll[0]} #{roll[1]}"
+        # end
+      # end
+    # end
+
+    # @macros["roll initiative"] = lambda do |junk|
+      # roll = Actions.roll_dice("1d20 + #{(info["dex"] - 10) / 2}")
+      # return "#{@name} results Initiative\n"\
+        # "#{roll[0]} #{roll[1]}"
+    # end
+  # end
 # end
