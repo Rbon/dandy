@@ -1,8 +1,17 @@
-## TODO:  Spells.
-##        Proper help text.
-##        Smarter tab completion.
+## TODO:
+## Spells.
+##
+## Proper help text.
+##
+## Smarter tab completion.
 
-## BUGS: Un-numlock'd numberpad keys still insert text into the line editor.
+## BUGS:
+## Un-numlock'd numberpad keys still insert text into the line editor.
+##
+## Backspace acts differently on other computers.
+##
+## Syntax errors in sub-commands compound with the same errors in the
+## super-command.
 
 
 require "json"
@@ -10,6 +19,7 @@ require "curses"
 
 
 class Main
+  attr_writer(:running)
 
   def initialize
     @output_buffer = ""
@@ -27,7 +37,9 @@ class Main
       :backspace => 263,
       :left_arrow => 260,
       :right_arrow => 261,
+      :home => 262,
       :delete => 330,
+      :end => 360,
       :normal_keys =>
         "`1234567890-=qwertyuiop[]\\asdfghjkl;'zxcvbnm,./'`"\
         "~!@\#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL:\"ZXCVBNM<>? ".split(""),
@@ -38,6 +50,7 @@ class Main
     }
     @commands = ["quit", "exit", "roll", "help"]
     @aliases = {"attack" => "roll 1d20"}
+    @builtins = Builtins.new(self)
 
     begin
       Curses.init_screen
@@ -63,7 +76,7 @@ class Main
     end
   end
 
-  def  handle_input(input)
+  def handle_input(input)
     case input
 
     when @keys[:tab]
@@ -88,8 +101,8 @@ class Main
         if @history.include?(@input_buffer)
           @history.delete(@input_buffer)
         end
-        @history.insert(1, @input_buffer)
-        draw_output(run_command(@input_buffer))
+        @history.insert(1, String.new(@input_buffer))
+        draw_output(run_command(@input_buffer).to_s)
         draw_output(" ")
         @input_buffer = ""
         @curs_pos = 0
@@ -135,6 +148,14 @@ class Main
       else
         access_history(@history_pos - 1)
       end
+
+    when @keys[:home]
+      @input_window.setpos(0, 3)
+      @curs_pos = 0
+
+    when @keys[:end]
+      @input_window.setpos(0, 3 + @input_buffer.length)
+      @curs_pos = @input_buffer.length
 
     else
       if @keys[:normal_keys].include?(input.to_s)
@@ -193,24 +214,32 @@ class Main
 
   def run_command(line)
 
-    # expand sub-commands
-    line.scan(/\[.*\]/) {  }
+    ## expand sub-commands
+    new_line = []
+    line.split(" ").each do |word|
+      if word.match?(/\([^\(\)]*\)/)
+        new_line.push(run_command(word[1..-2]))
+        next
+      end
+      new_line.push(word)
+    end
+    line = new_line.join(" ")
 
+    ## quick roll
     if line.match?(/^((?:\d+d\d+)(?:[-\+]\d+)?)$/)
-      return Builtins.roll(line)
+      return @builtins.roll(line)
     end
 
     @args = line.split(" ", 2)
     case @args[0]
-
     when "roll"
-      return Builtins.roll(@args[1])
-
+      return @builtins.roll(@args[1])
     when "echo"
-      return Builtins.echo(@args[1])
-
+      return @builtins.echo(@args[1])
+    when "exit", "quit"
+      return @builtins.quit
     else
-      return "No such command: #{@args[0]}"
+      draw_output("No such command: #{@args[0].inspect}")
     end
   end
 
@@ -219,26 +248,31 @@ end
 
 class Builtins
 
-  def self.roll(args)
-    notation = args.match(/^(\d+)d(\d+)([-\+]\d+)?$/)
-    if notation
+  def initialize(core)
+    @core = core
+  end
+
+  def echo(args)
+    return args
+  end
+
+  def roll(args)
+    args.match(/^(\d+)d(\d+)([-\+]\d+)?$/) do |notation|
       results = []
       count, sides, mod = notation.captures
       count.to_i.times { results.push(rand(1..sides.to_i)) }
       notation = "#{count}d#{sides}#{mod.to_s}"
       return "#{results.sum + mod.to_i} (#{count}d#{sides}#{mod.to_s})"
-    else
-      return "roll: bad syntax"
     end
+    return "roll: bad syntax"
   end
 
-  def self.echo(args)
-    return args
+  def quit
+    @core.running = false
   end
 
 end
 
 
 Main.new
-
 
