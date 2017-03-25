@@ -37,6 +37,7 @@ class Main
         "roll 1d4 2d6+3"
     }
     @commands = ["quit", "exit", "roll", "help"]
+    @aliases = {"attack" => "roll 1d20"}
 
     begin
       Curses.init_screen
@@ -88,7 +89,8 @@ class Main
           @history.delete(@input_buffer)
         end
         @history.insert(1, @input_buffer)
-        run_command(@input_buffer)
+        draw_output(run_command(@input_buffer))
+        draw_output(" ")
         @input_buffer = ""
         @curs_pos = 0
         @history_pos = 0
@@ -190,74 +192,48 @@ class Main
   end
 
   def run_command(line)
-    @args = line.split(" ", -1)
-    success = true
-    case @args[0]
 
-    when "exit", "quit"
-      @running = false
+    # expand sub-commands
+    line.scan(/\[.*\]/) {  }
 
-    when "roll"
-      if @args[1]
-        bad_arg = false
-        rolls = []
-
-        ## check if all the args are proper notation
-        @args[1..-1].each do |arg|
-          match = arg.scan(/^(\d+d\d+)([-\+]?\d+)?$/)[0] ## dice notation
-          if match
-            rolls.push(match)
-          else
-            bad_arg = true
-            break
-          end
-        end
-        if bad_arg
-          display_usage
-
-        else
-          rolls.each do |roll|
-            count, sides = roll[0].split("d").map { |item| item.to_i }
-            results, sum = roll_dice(count, sides)
-            output = " | #{results.inspect}"
-            if roll[1]
-              modifier = roll[1].to_i
-              if modifier > 0
-                output << " +#{modifier}"
-              elsif modifier < 0
-                output << " #{modifier}"
-              end
-              sum += modifier
-            end
-            draw_output(sum.to_s + output)
-          end
-        end
-
-      else
-        display_usage
-      end
-
-    when "help"
-      draw_output("Under construction.")
-
-    else
-      draw_output("No such command: #{@args[0]}")
+    if line.match?(/^((?:\d+d\d+)(?:[-\+]\d+)?)$/)
+      return Builtins.roll(line)
     end
 
-    draw_output(" ")
+    @args = line.split(" ", 2)
+    case @args[0]
+
+    when "roll"
+      return Builtins.roll(@args[1])
+
+    when "echo"
+      return Builtins.echo(@args[1])
+
+    else
+      return "No such command: #{@args[0]}"
+    end
   end
 
-  def roll_dice(count, sides)
-    results = []
-    count.times { results.push(rand(1..sides)) }
-    return results, results.sum
+end
+
+
+class Builtins
+
+  def self.roll(args)
+    notation = args.match(/^(\d+)d(\d+)([-\+]\d+)?$/)
+    if notation
+      results = []
+      count, sides, mod = notation.captures
+      count.to_i.times { results.push(rand(1..sides.to_i)) }
+      notation = "#{count}d#{sides}#{mod.to_s}"
+      return "#{results.sum + mod.to_i} (#{count}d#{sides}#{mod.to_s})"
+    else
+      return "roll: bad syntax"
+    end
   end
 
-  def display_usage
-    draw_output(
-      "Example: #{@usage[@args[0]]}\n"\
-      "Run help #{@args[0]} for more info."
-    )
+  def self.echo(args)
+    return args
   end
 
 end
@@ -266,101 +242,3 @@ end
 Main.new
 
 
-# class Actions
-
-  # # Rolls to hit, i.e. 1d20 + attack mod.
-  # #   Automatically re-results for crits and fumbles.
-  # #
-  # # attack_mod - An Integer of the total attack modifier for the action being
-  # #              performed.
-  # #
-  # # Example
-  # #
-  # #   hit(2)
-  # #   # => 16 to hit [14 + 2]
-  # #
-  # # Returns a multiple-line String detailing how the roll went.
-  # def self.hit(attack_mod, advantage = nil)
-    # result = ""
-    # roll = roll_dice("1d20 + #{attack_mod}")
-    # result += "#{roll[0]} to hit #{roll[1]}"
-
-    # if roll[0] == 20 + attack_mod
-      # result += "\nRolling to confirm crit...\n"
-      # result += hit(attack_mod)
-
-    # elsif roll[0] == 1 + attack_mod
-      # result += "\nRolling to confirm fumble...\n"
-      # result += hit(attack_mod)
-    # end
-
-    # if advantage
-      # advantage = Main.get_phrase(advantage, ["advantage", "disadvantage"])[0]
-      # case advantage
-      # when "advantage"
-        # result += "\nRolling for advantage...\n"
-        # result += hit(attack_mod)
-      # when "disadvantage"
-        # result += "\nRolling for disadvantage...\n"
-        # result += hit(attack_mod)
-      # end
-    # end
-
-
-    # return result
-  # end
-
-  # def self.user_roll(notation)
-    # if /\d+d[\df%]+(?:\s*[+-]\s*\d+)?/.match(notation)
-      # roll = Actions.roll_dice(notation)
-      # return "#{roll[0]} #{roll[1]}"
-    # else
-      # return "BAD NOTATION"
-    # end
-  # end
-
-  # def self.quit
-    # exit
-  # end
-
-# end
-
-# class Creature
-  # attr_reader :macros
-
-  # # Initialize s a Creature.
-  # #
-  # # name - A String that will be set as the creature's name, and displayed as
-  # #        part of actions rolled.
-  # # info - An Array of ability scores, actions, and other nessisary data.
-  # def initi alize(name, info)
-    # @name   = name
-    # @macros = { }
-
-    # info[" actions"].each do |name, info|
-      # @macros[name.downcase] = lambda do |advantage = nil|
-        # roll = Actions.roll_dice(info[1])
-        # return "#{@name} uses #{name}\n"\
-          # "#{Actions.hit(info[0], advantage)}\n"\
-          # "#{roll[0]} #{info[2]} damage #{roll[1]}"
-      # end
-    # end
-
-    # info.each do |key, value|
-      # case key
-      # when "str", "dex", "con", "int", "wis", "cha"
-        # @macros["roll " + key] = lambda do |junk|
-          # roll = Actions.roll_dice("1d20 + #{(value - 10) / 2}")
-          # return "#{@name} results #{key.upcase}\n"\
-            # "#{roll[0]} #{roll[1]}"
-        # end
-      # end
-    # end
-
-    # @macros["roll initiative"] = lambda do |junk|
-      # roll = Actions.roll_dice("1d20 + #{(info["dex"] - 10) / 2}")
-      # return "#{@name} results Initiative\n"\
-        # "#{roll[0]} #{roll[1]}"
-    # end
-  # end
-# end
