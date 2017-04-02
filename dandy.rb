@@ -34,28 +34,28 @@ module Keys
   }.invert
 
   def tab
-    current_word = @input_buffer.split(" ")[-1]
+    current_word = @buffer.split(" ")[-1]
     return unless current_word
     @commands.each do |arg|
       next unless arg.start_with?(current_word)
-      line = "#{@input_buffer.split(" ")[0..-2].join(" ")} #{arg} ".lstrip
-      clear_line
-      @input_window.addstr(line)
-      @input_buffer = String.new(line)
-      @curs_pos = @input_buffer.length
-      @input_window.refresh
+      line = "#{@input.buffer.split(" ")[0..-2].join(" ")} #{arg} ".lstrip
+      @input.clear_line
+      @input.window.addstr(line)
+      @input.buffer = String.new(line)
+      @input.curs_pos = @input.buffer.length
+      @input.window.refresh
     end
   end
 
   def enter
-    return if @input_buffer.empty?
-    @output.draw(" > #{@input_buffer}")
+    return if @buffer.empty?
+    @output.draw(" > #{@buffer}")
     clear_line
-    @history.delete(@input_buffer) if @history.include?(@input_buffer)
-    @history.insert(1, String.new(@input_buffer))
-    @output.draw(run_command(@input_buffer).to_s)
+    @history.delete(@buffer) if @history.include?(@buffer)
+    @history.insert(1, String.new(@buffer))
+    @output.draw(@core.run_command(@buffer).to_s)
     @output.draw(" ")
-    @input_buffer = ""
+    @buffer = ""
     @curs_pos = 0
     @history_pos = 0
   end
@@ -64,26 +64,26 @@ module Keys
     return if @curs_pos.zero?
     @curs_pos -= 1
     remove_character(@curs_pos)
-    @input_window.refresh
+    @window.refresh
   end
 
   def delete
-    return unless @curs_pos < @input_buffer.length
+    return unless @curs_pos < @buffer.length
     remove_character(@curs_pos)
-    @input_window.refresh
-    @input_window.refresh
+    @window.refresh
+    @window.refresh
   end
 
   def left_arrow
     return if @curs_pos.zero?
     @curs_pos -= 1
-    @input_window.setpos(0, @curs_pos + 3)
+    @window.setpos(0, @curs_pos + 3)
   end
 
   def right_arrow
-    return unless @curs_pos < @input_buffer.length
+    return unless @curs_pos < @buffer.length
     @curs_pos += 1
-    @input_window.setpos(0, @curs_pos + 3)
+    @window.setpos(0, @curs_pos + 3)
   end
 
   def up_arrow
@@ -103,13 +103,13 @@ module Keys
   end
 
   def home_key
-    @input_window.setpos(0, 3)
+    @input.window.setpos(0, 3)
     @curs_pos = 0
   end
 
   def end_key
-    @input_window.setpos(0, 3 + @input_buffer.length)
-    @curs_pos = @input_buffer.length
+    @input.window.setpos(0, 3 + @input.buffer.length)
+    @curs_pos = @input.buffer.length
   end
 end
 
@@ -125,7 +125,7 @@ module Commands
   }.freeze
 
   def make_alias(args)
-    debug_output("alias: got args: #{args}")
+    @output.debug("alias: got args: #{args}")
     return "alias: bad syntax" unless args
     name, command = args.split(" ", 2)
     @aliases[name] = command
@@ -139,7 +139,7 @@ module Commands
 
   def roll(args)
     return unless args
-    debug_output("roll: got line: #{args}")
+    @output.debug("roll: got line: #{args}")
     args.match(/^(\d+)d(\d+)([-\+]\d+)?$/) do |notation|
       results = []
       count, sides, mod = notation.captures
@@ -156,9 +156,9 @@ module Commands
   def exec(file)
     return "exec: no file given" unless file
     return "exec: no such file #{file}" unless File.exist?(file)
-    draw_output("Executing file: #{file}")
+    @output.draw("Executing file: #{file}")
     File.readlines(file).each { |line| run_command(line) }
-    draw_output("Done")
+    @output.draw("Done")
   end
 end
 
@@ -166,20 +166,12 @@ class Main
   include Commands
   include Keys
 
-  attr_reader :aliases, :input_window, :draw_output
+  attr_reader :aliases, :input_window, :draw_output, :input, :output, :silent
   attr_writer :running
 
   def initialize
-    @input_buffer = ""
-    @history = [""]
-    @history_pos = 0
-    @curs_pos = 0
     @commands = %w(quit exit roll help)
     @aliases = {}
-    # @silent = true
-    # exec("config")
-    # draw_output(" ")
-    # @silent = false
     @running = true
     # @debug = true
   end
@@ -194,81 +186,31 @@ class Main
     end
   end
 
-  def prep_windows
+  def run
     Curses.init_screen
     # Curses.curs_set(0) ## Invisible cursor
     Curses.noecho ## Don't display pressed characters
-    term_w = Curses.cols - 1
-    term_h = Curses.lines - 1
-    @input_window = Curses::Window.new(1, term_w, term_h, 0)
-    @input_window.keypad = true
-    @output = Output.new(term_h, term_w, @input_window)
-    @input_window.addstr(" > ")
-
+    @input = Input.new(self)
+    @output = @input.output
+    # @output.silent = true
+    # exec("config")
+    # @output.draw(" ")
+    # @output.silent = false
     ## causes the screen to flicker once at boot so it doesn't flicker again
     @output.window.refresh
-    @input_window.refresh
-  end
+    @input.window.refresh
 
-  def run
-    prep_windows
-    handle_input(@input_window.getch) while @running
+    @input.handle_input while @running
   rescue Interrupt
   ensure
     Curses.close_screen
-  end
-
-  def debug_output(string)
-    draw_output(string) if @debug
-  end
-
-  def handle_input(input)
-    if SPECIAL_KEYS[input]
-      method(SPECIAL_KEYS[input]).call
-    else
-      type_character(input.to_s)
-    end
-  end
-
-  def type_character(input)
-    if NORMAL_KEYS.include?(input)
-      @input_buffer.insert(@curs_pos, input)
-      @input_window.setpos(0, 3)
-      @input_window.addstr(@input_buffer)
-      @curs_pos += 1
-      @input_window.setpos(0, @curs_pos + 3)
-      @input_window.refresh
-    else
-      draw_output(input)
-    end
-  end
-
-  def access_history(position)
-    @history_pos = position
-    clear_line
-    @input_window.addstr(@history[@history_pos])
-    @input_buffer = String.new(@history[@history_pos])
-    @curs_pos = @input_buffer.length
-  end
-
-  def clear_line
-    @input_window.setpos(0, 3)
-    @input_window.addstr(" " * @input_buffer.length)
-    @input_window.setpos(0, 3)
-  end
-
-  def remove_character(position)
-    @input_buffer.slice!(position)
-    @input_window.setpos(0, 3)
-    @input_window.addstr("#{@input_buffer} ")
-    @input_window.setpos(0, position + 3)
   end
 
   def expand_line(line)
     new_line = []
     line.split(" ").each do |word|
       if word.match?(/\([^\(\)]*\)/)
-        debug_output("expand_line: got parens match")
+        @output.debug("expand_line: got parens match")
         new_word = run_command(word[1..-2])
         new_line.push(new_word)
       else
@@ -279,13 +221,82 @@ class Main
   end
 end
 
+class Input
+  include Keys
+
+  attr_reader :window, :output
+  attr_accessor :buffer, :curs_pos
+
+  def initialize(core)
+    @history = [""]
+    @history_pos = 0
+    @core = core
+    @curs_pos = 0
+    term_w = Curses.cols - 1
+    term_h = Curses.lines - 1
+    @window = Curses::Window.new(1, term_w, term_h, 0)
+    @output = Output.new(self)
+    @window.keypad = true
+    @window.addstr(" > ")
+    @buffer = ""
+  end
+
+  def handle_input
+    input = @window.getch
+    if SPECIAL_KEYS[input]
+      method(SPECIAL_KEYS[input]).call
+    else
+      type_character(input.to_s)
+    end
+  end
+
+  def remove_character(position)
+    @buffer.slice!(position)
+    @window.setpos(0, 3)
+    @window.addstr("#{@buffer} ")
+    @window.setpos(0, position + 3)
+  end
+
+  def clear_line
+    @window.setpos(0, 3)
+    @window.addstr(" " * @buffer.length)
+    @window.setpos(0, 3)
+    @window.refresh
+  end
+
+  def type_character(input)
+    if NORMAL_KEYS.include?(input)
+      @buffer.insert(@curs_pos, input)
+      @window.setpos(0, 3)
+      @window.addstr(@buffer)
+      @curs_pos += 1
+      @window.setpos(0, @curs_pos + 3)
+      @window.refresh
+    else
+      @output.draw(input)
+    end
+  end
+
+  def access_history(position)
+    @history_pos = position
+    clear_line
+    @window.addstr(@history[@history_pos])
+    @buffer = String.new(@history[@history_pos])
+    @curs_pos = @buffer.length
+  end
+end
+
 class Output
   attr_reader :window
+  attr_writer :silent
 
-  def initialize(term_h, term_w, input_window)
-    @input_window = input_window
+  def initialize(input)
+    term_w = Curses.cols - 1
+    term_h = Curses.lines - 1
+    @input = input
     @window = Curses::Window.new(term_h, term_w, 0, 0)
     @buffer = ""
+    @silent = false
   end
 
   def draw(string)
@@ -306,7 +317,11 @@ class Output
     @buffer = @buffer.join("\n") + "\n"
     @window.addstr(@buffer)
     @window.refresh
-    @input_window.refresh
+    @input.window.refresh
+  end
+
+  def debug(string)
+    draw_output(string) if @debug
   end
 end
 
