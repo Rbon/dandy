@@ -49,12 +49,12 @@ module Keys
 
   def enter
     return if @input_buffer.empty?
-    draw_output(" > #{@input_buffer}")
+    @output.draw(" > #{@input_buffer}")
     clear_line
     @history.delete(@input_buffer) if @history.include?(@input_buffer)
     @history.insert(1, String.new(@input_buffer))
-    draw_output(run_command(@input_buffer).to_s)
-    draw_output(" ")
+    @output.draw(run_command(@input_buffer).to_s)
+    @output.draw(" ")
     @input_buffer = ""
     @curs_pos = 0
     @history_pos = 0
@@ -113,8 +113,17 @@ module Keys
   end
 end
 
+module Commands
+  COMMAND_LIST = {
+    alias: :make_alias,
+    echo: :echo,
+    roll: :roll,
+    halt: :halt,
+    quit: :halt,
+    exit: :halt,
+    exec: :exec
+  }.freeze
 
-module Builtins
   def make_alias(args)
     debug_output("alias: got args: #{args}")
     return "alias: bad syntax" unless args
@@ -154,8 +163,9 @@ module Builtins
 end
 
 class Main
-  include Builtins
+  include Commands
   include Keys
+
   attr_reader :aliases, :input_window, :draw_output
   attr_writer :running
 
@@ -165,31 +175,26 @@ class Main
     @history_pos = 0
     @curs_pos = 0
     @commands = %w(quit exit roll help)
-    @output_buffer = ""
     @aliases = {}
+    # @silent = true
+    # exec("config")
+    # draw_output(" ")
+    # @silent = false
     @running = true
     # @debug = true
   end
 
   def run_command(line)
-    # debug_output("run_command: got line: #{line}")
-    @args = line.split(" ", 2)
-    if @aliases[@args[0]]
-      return run_command(@aliases[@args[0]])
-    end
-    case @args[0]
-    when /^((?:\d+d\d+)(?:[-\+]\d+)?)$/ then roll(line)
-    when "alias" then make_alias(@args[1])
-    when "exec" then exec(@args[1])
-    when "roll" then roll(@args[1])
-    when "echo" then echo(@args[1])
-    when "exit", "quit"
-      halt
-    else "No such command: #{@args[0].inspect}"
+    return unless line
+    command, args = line.split(" ", 2)
+    if COMMAND_LIST[command.to_sym]
+      method(COMMAND_LIST[command.to_sym]).call(args)
+    else
+      "No such command: #{command}"
     end
   end
 
-  def run
+  def prep_windows
     Curses.init_screen
     # Curses.curs_set(0) ## Invisible cursor
     Curses.noecho ## Don't display pressed characters
@@ -197,41 +202,20 @@ class Main
     term_h = Curses.lines - 1
     @input_window = Curses::Window.new(1, term_w, term_h, 0)
     @input_window.keypad = true
-    @output_window = Curses::Window.new(term_h, term_w, 0, 0)
+    @output = Output.new(term_h, term_w, @input_window)
     @input_window.addstr(" > ")
-    ## causes the screen to flicker once at boot so it doesn't flicker again
-    @output_window.refresh
-    @input_window.refresh
 
-    @silent = true
-    exec("config")
-    draw_output(" ")
-    @silent = false
+    ## causes the screen to flicker once at boot so it doesn't flicker again
+    @output.window.refresh
+    @input_window.refresh
+  end
+
+  def run
+    prep_windows
     handle_input(@input_window.getch) while @running
   rescue Interrupt
   ensure
     Curses.close_screen
-  end
-
-  def draw_output(string)
-    return if @silent
-    string = string.scan(/.{1,#{@output_window.maxx - 1}}/).join("\n")
-    @output_buffer << string
-    @output_buffer = @output_buffer.split("\n")
-    if @output_buffer.length > @output_window.maxy
-      delta = @output_buffer.length - @output_window.maxy
-      @output_buffer = @output_buffer[delta..-1]
-    end
-    if @output_buffer.length < @output_window.maxy
-      delta = @output_window.maxy - @output_buffer.length
-      @output_window.setpos(delta, 0)
-    else
-      @output_window.setpos(0, 0)
-    end
-    @output_buffer = @output_buffer.join("\n") + "\n"
-    @output_window.addstr(@output_buffer)
-    @output_window.refresh
-    @input_window.refresh
   end
 
   def debug_output(string)
@@ -280,20 +264,50 @@ class Main
     @input_window.setpos(0, position + 3)
   end
 
-  # def expand_line(line)
-    # new_line = []
-    # line.split(" ").each do |word|
-      # if word.match?(/\([^\(\)]*\)/)
-        # debug_output("expand_line: got parens match")
-        # new_word = run_command(word[1..-2])
-        # new_line.push(new_word)
-      # else
-        # new_line.push(word)
-      # end
-    # end
-    # line = new_line.join(" ")
-  # end
+  def expand_line(line)
+    new_line = []
+    line.split(" ").each do |word|
+      if word.match?(/\([^\(\)]*\)/)
+        debug_output("expand_line: got parens match")
+        new_word = run_command(word[1..-2])
+        new_line.push(new_word)
+      else
+        new_line.push(word)
+      end
+    end
+    new_line.join(" ")
+  end
 end
 
+class Output
+  attr_reader :window
+
+  def initialize(term_h, term_w, input_window)
+    @input_window = input_window
+    @window = Curses::Window.new(term_h, term_w, 0, 0)
+    @buffer = ""
+  end
+
+  def draw(string)
+    return if @silent
+    string = string.scan(/.{1,#{@window.maxx - 1}}/).join("\n")
+    @buffer << string
+    @buffer = @buffer.split("\n")
+    if @buffer.length > @window.maxy
+      delta = @buffer.length - @window.maxy
+      @buffer = @buffer[delta..-1]
+    end
+    if @buffer.length < @window.maxy
+      delta = @window.maxy - @buffer.length
+      @window.setpos(delta, 0)
+    else
+      @window.setpos(0, 0)
+    end
+    @buffer = @buffer.join("\n") + "\n"
+    @window.addstr(@buffer)
+    @window.refresh
+    @input_window.refresh
+  end
+end
 
 Main.new.run
