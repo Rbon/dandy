@@ -35,11 +35,21 @@ module Keys
 
 end
 
-class KeyEvents
+class InputHandler
+  include Keys
 
   def initialize(input, output)
     @input = input
     @output = output
+  end
+
+  def handle_input
+    input = @input.window.getch
+    if SPECIAL_KEYS[input]
+      method(SPECIAL_KEYS[input]).call
+    else
+      @input.type_character(input.to_s)
+    end
   end
 
   def tab
@@ -60,8 +70,7 @@ class KeyEvents
     return if @input.buffer.empty?
     @output.draw(" > #{@input.buffer}")
     @input.clear_line
-    @input.history.delete(@input.buffer) if @input.history.include?(@input.buffer)
-    @input.history.insert(1, String.new(@input.buffer))
+    @input.history.add(@input.buffer)
     @output.draw(Commands.new(@output).run(@input.buffer).to_s)
     @output.draw(" ")
     @input.buffer = ""
@@ -70,10 +79,10 @@ class KeyEvents
   end
 
   def backspace
-    return if @curs_pos.zero?
-    @curs_pos -= 1
-    remove_character(@curs_pos)
-    @window.refresh
+    return if @input.curs_pos.zero?
+    @input.curs_pos -= 1
+    @input.remove_character(@input.curs_pos)
+    @input.window.refresh
   end
 
   def delete
@@ -122,6 +131,19 @@ class KeyEvents
   end
 end
 
+class History
+  def initialize
+    @history = [""]
+    @pos = 0
+    @current = nil
+  end
+
+  def add(input)
+    @history.delete(input)
+    @history.insert(1, String.new(input))
+  end
+end
+
 class Main
   include Keys
 
@@ -149,7 +171,7 @@ class Main
     @output.window.refresh
     @input_box.window.refresh
 
-    @input_box.handle_input while @running
+    InputHandler.new(@input_box, @output).handle_input while @running
   rescue Interrupt
   ensure
     Curses.close_screen
@@ -240,8 +262,7 @@ class InputBox
   attr_accessor :buffer, :curs_pos, :history, :history_pos
 
   def initialize(core)
-    @history = [""]
-    @history_pos = 0
+    @history = History.new
     @core = core
     @curs_pos = 0
     term_w = Curses.cols - 1
@@ -263,7 +284,7 @@ class InputBox
     end
   end
 
-  def remove_character(input_box, position)
+  def remove_character(position)
     @buffer.slice!(position)
     @window.setpos(0, 3)
     @window.addstr("#{buffer} ")
