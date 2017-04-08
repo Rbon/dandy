@@ -33,6 +33,15 @@ module Keys
     end_key: 360
   }.invert
 
+end
+
+class KeyEvents
+
+  def initialize(input, output)
+    @input = input
+    @output = output
+  end
+
   def tab
     current_word = @buffer.split(" ")[-1]
     return unless current_word
@@ -48,16 +57,16 @@ module Keys
   end
 
   def enter
-    return if @buffer.empty?
-    @output.draw(" > #{@buffer}")
-    clear_line
-    @history.delete(@buffer) if @history.include?(@buffer)
-    @history.insert(1, String.new(@buffer))
-    @output.draw(@core.run_command(@buffer).to_s)
+    return if @input.buffer.empty?
+    @output.draw(" > #{@input.buffer}")
+    @input.clear_line
+    @input.history.delete(@input.buffer) if @input.history.include?(@input.buffer)
+    @input.history.insert(1, String.new(@input.buffer))
+    @output.draw(Commands.new(@output).run(@input.buffer).to_s)
     @output.draw(" ")
-    @buffer = ""
-    @curs_pos = 0
-    @history_pos = 0
+    @input.buffer = ""
+    @input.curs_pos = 0
+    @input.history_pos = 0
   end
 
   def backspace
@@ -113,7 +122,55 @@ module Keys
   end
 end
 
-module Commands
+class Main
+  include Keys
+
+  attr_reader :aliases, :input_window, :draw_output, :input, :output, :silent
+  attr_writer :running
+
+  def initialize
+    @commands = %w(quit exit roll help)
+    @aliases = {}
+    @running = true
+    # @debug = true
+  end
+
+  def run
+    Curses.init_screen
+    # Curses.curs_set(0) ## Invisible cursor
+    Curses.noecho ## Don't display pressed characters
+    @input_box = InputBox.new(self)
+    @output = @input_box.output
+    # @output.silent = true
+    # exec("config")
+    # @output.draw(" ")
+    # @output.silent = false
+    ## causes the screen to flicker once at boot so it doesn't flicker again
+    @output.window.refresh
+    @input_box.window.refresh
+
+    @input_box.handle_input while @running
+  rescue Interrupt
+  ensure
+    Curses.close_screen
+  end
+
+  def expand_line(line)
+    new_line = []
+    line.split(" ").each do |word|
+      if word.match?(/\([^\(\)]*\)/)
+        @output.debug("expand_line: got parens match")
+        new_word = run_command(word[1..-2])
+        new_line.push(new_word)
+      else
+        new_line.push(word)
+      end
+    end
+    new_line.join(" ")
+  end
+end
+
+class Commands
   COMMAND_LIST = {
     alias: :make_alias,
     echo: :echo,
@@ -123,6 +180,20 @@ module Commands
     exit: :halt,
     exec: :exec
   }.freeze
+
+  def initialize(output)
+    @output = output
+  end
+
+  def run(line)
+    return unless line
+    command, args = line.split(" ", 2)
+    if COMMAND_LIST[command.to_sym]
+      method(COMMAND_LIST[command.to_sym]).call(args)
+    else
+      "No such command: #{command}"
+    end
+  end
 
   def make_alias(args)
     @output.debug("alias: got args: #{args}")
@@ -139,7 +210,7 @@ module Commands
 
   def roll(args)
     return unless args
-    @output.debug("roll: got line: #{args}")
+    # @output.debug("roll: got line: #{args}")
     args.match(/^(\d+)d(\d+)([-\+]\d+)?$/) do |notation|
       results = []
       count, sides, mod = notation.captures
@@ -162,70 +233,11 @@ module Commands
   end
 end
 
-class Main
-  include Commands
-  include Keys
-
-  attr_reader :aliases, :input_window, :draw_output, :input, :output, :silent
-  attr_writer :running
-
-  def initialize
-    @commands = %w(quit exit roll help)
-    @aliases = {}
-    @running = true
-    # @debug = true
-  end
-
-  def run_command(line)
-    return unless line
-    command, args = line.split(" ", 2)
-    if COMMAND_LIST[command.to_sym]
-      method(COMMAND_LIST[command.to_sym]).call(args)
-    else
-      "No such command: #{command}"
-    end
-  end
-
-  def run
-    Curses.init_screen
-    # Curses.curs_set(0) ## Invisible cursor
-    Curses.noecho ## Don't display pressed characters
-    @input = Input.new(self)
-    @output = @input.output
-    # @output.silent = true
-    # exec("config")
-    # @output.draw(" ")
-    # @output.silent = false
-    ## causes the screen to flicker once at boot so it doesn't flicker again
-    @output.window.refresh
-    @input.window.refresh
-
-    @input.handle_input while @running
-  rescue Interrupt
-  ensure
-    Curses.close_screen
-  end
-
-  def expand_line(line)
-    new_line = []
-    line.split(" ").each do |word|
-      if word.match?(/\([^\(\)]*\)/)
-        @output.debug("expand_line: got parens match")
-        new_word = run_command(word[1..-2])
-        new_line.push(new_word)
-      else
-        new_line.push(word)
-      end
-    end
-    new_line.join(" ")
-  end
-end
-
-class Input
+class InputBox
   include Keys
 
   attr_reader :window, :output
-  attr_accessor :buffer, :curs_pos
+  attr_accessor :buffer, :curs_pos, :history, :history_pos
 
   def initialize(core)
     @history = [""]
@@ -244,20 +256,21 @@ class Input
   def handle_input
     input = @window.getch
     if SPECIAL_KEYS[input]
-      method(SPECIAL_KEYS[input]).call
+      events = KeyEvents.new(self, @output)
+      events.method(SPECIAL_KEYS[input]).call
     else
       type_character(input.to_s)
     end
   end
 
-  def remove_character(position)
+  def remove_character(input_box, position)
     @buffer.slice!(position)
     @window.setpos(0, 3)
-    @window.addstr("#{@buffer} ")
+    @window.addstr("#{buffer} ")
     @window.setpos(0, position + 3)
   end
 
-  def clear_line
+  def clear_line()
     @window.setpos(0, 3)
     @window.addstr(" " * @buffer.length)
     @window.setpos(0, 3)
@@ -285,6 +298,8 @@ class Input
     @curs_pos = @buffer.length
   end
 end
+
+
 
 class Output
   attr_reader :window
