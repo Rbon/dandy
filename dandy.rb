@@ -12,101 +12,41 @@
 ##
 ## Syntax errors in sub-commands compound with the same errors in the
 ## super-command.
+##
+## Text can be typed off screen, if the line is long enough. I don't know what
+## the expected result should be, but I don't like it as it is.
 
 require "json"
 require "curses"
 
-module Keys
-  NORMAL_KEYS =
-    "`1234567890-=qwertyuiop[]\\asdfghjkl;'zxcvbnm,./'`"\
-    "~!@\#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL:\"ZXCVBNM<>? ".split("")
-  SPECIAL_KEYS = {
-    tab: 9,
-    enter: 10,
-    down_arrow: 258,
-    up_arrow: 259,
-    left_arrow: 260,
-    right_arrow: 261,
-    home_key: 262,
-    backspace: 263,
-    delete: 330,
-    end_key: 360
-  }.invert
-
-end
-
 class InputHandler
-  include Keys
+  SPECIAL_KEYS = {
+    tab:         9,
+    enter:       10,
+    down_arrow:  258,
+    up_arrow:    259,
+    left_arrow:  260,
+    right_arrow: 261,
+    home_key:    262,
+    backspace:   263,
+    delete:      330,
+    end_key:     360
+  }.invert
+  BINDINGS = {
+    tab:         :under_construction,
+    enter:       :return,
+    backspace:   :left_delete_character,
+    delete:      :delete_character,
+    left_arrow:  :move_cursor_left,
+    right_arrow: :move_cursor_right,
+    up_arrow:    :shift_history_up,
+    down_arrow:  :shift_history_down,
+    home_key:    :start_of_line,
+    end_key:     :end_of_line
+  }.freeze
 
-  def initialize(input, output)
-    @input = input
-    @output = output
-  end
-
-  def handle_input
-    input = @input.window.getch
-    if SPECIAL_KEYS[input]
-      method(SPECIAL_KEYS[input]).call
-    else
-      @input.type_character(input.to_s)
-    end
-  end
-
-  def tab
-    current_word = @buffer.split(" ")[-1]
-    return unless current_word
-    @commands.each do |arg|
-      next unless arg.start_with?(current_word)
-      line = "#{@input.buffer.split(" ")[0..-2].join(" ")} #{arg} ".lstrip
-      @input.clear_line
-      @input.window.addstr(line)
-      @input.buffer = String.new(line)
-      @input.curs_pos = @input.buffer.length
-    end
-  end
-
-  def enter
-    return if @input.buffer.empty?
-    @output.draw(" > #{@input.buffer}")
-    @input.clear_line
-    @input.history.add(@input.buffer)
-    @output.draw(Commands.new(@output).run(@input.buffer).to_s)
-    @output.draw(" ")
-    @input.buffer = ""
-    @input.cursor.set_pos(0)
-    @input.history_pos = 0
-  end
-
-  def backspace
-    @input.remove_character(-1) if @input.cursor.pos > 0
-  end
-
-  def delete
-    @input.remove_character
-  end
-
-  def left_arrow
-    @input.cursor.move_left
-  end
-
-  def right_arrow
-    @input.cursor.move_right
-  end
-
-  def up_arrow
-    @input.shift_history(:up)
-  end
-
-  def down_arrow
-    @input.shift_history(:down)
-  end
-
-  def home_key
-    @input.cursor.set_pos(0)
-  end
-
-  def end_key
-    @input.cursor.set_pos(@input.buffer.length)
+  def self.handle_input(input)
+    BINDINGS[SPECIAL_KEYS[input]] || :type_character
   end
 end
 
@@ -123,11 +63,11 @@ class History
   end
 
   def shift_up
-    @pos = (@pos + 1) % (@history.length)
+    @pos = (@pos + 1) % @history.length
   end
 
   def shift_down
-    @pos = (@pos - 1) % (@history.length)
+    @pos = (@pos - 1) % @history.length
   end
 
   def current
@@ -143,24 +83,22 @@ class Cursor
     @pos = 0
   end
 
-  def move_right
-    set_pos(@pos + 1)
+  def move_right(distance = 1)
+    self.pos = @pos + distance
   end
 
-  def move_left
-    set_pos(@pos - 1)
+  def move_left(distance = 1)
+    self.pos = @pos - distance
   end
 
-  def set_pos(pos)
-    pos = [[0, pos].max, @box.buffer.length].min ## stop pos from being oob
-    @pos = pos
-    @box.window.setpos(0, pos + 3)
+  def pos=(new_pos)
+    new_pos = [[0, new_pos].max, @box.buffer.length].min ## keep in bounds
+    @pos = new_pos
+    @box.window.setpos(0, new_pos + 3)
   end
 end
 
 class Main
-  include Keys
-
   attr_reader :aliases, :input_window, :draw_output, :input, :output, :silent
   attr_writer :running
 
@@ -169,9 +107,6 @@ class Main
     @aliases = {}
     @running = true
     # @debug = true
-  end
-
-  def run
     Curses.init_screen
     # Curses.curs_set(0) ## Invisible cursor
     Curses.noecho ## Don't display pressed characters
@@ -185,15 +120,15 @@ class Main
     ## causes the screen to flicker once at boot so it doesn't flicker again
     @output_box.window.refresh
     @input_box.window.refresh
+  end
 
+  def run
     while @running
-      InputHandler.new(@input_box, @output_box).handle_input
+      @input = @input_box.window.getch
+      @input_box.method(InputHandler.handle_input(@input)).call
       @output_box.window.refresh
       @input_box.window.refresh
     end
-  rescue Interrupt
-  ensure
-    Curses.close_screen
   end
 
   def expand_line(line)
@@ -275,17 +210,15 @@ class Commands
 end
 
 class InputBox
-  include Keys
-
   attr_reader :window, :output, :cursor
-  attr_accessor :buffer, :curs_pos, :history, :history_pos
+  attr_accessor :buffer, :history
 
   def initialize(core)
-    @history = History.new
     @core = core
     term_w = Curses.cols - 1
     term_h = Curses.lines - 1
     @window = Curses::Window.new(1, term_w, term_h, 0)
+    @history = History.new
     @output = Output.new(self)
     @cursor = Cursor.new(self)
     @window.keypad = true
@@ -293,11 +226,23 @@ class InputBox
     @buffer = ""
   end
 
-  def remove_character(offset = 0)
+  def delete_character(offset = 0)
     @buffer.slice!(@cursor.pos + offset)
     @window.setpos(0, 3)
     @window.addstr("#{buffer} ")
-    @cursor.set_pos(@cursor.pos + offset)
+    @cursor.pos = @cursor.pos + offset
+  end
+
+  def left_delete_character
+    delete_character(-1) if @cursor.pos > 0
+  end
+
+  def move_cursor_left
+    @cursor.move_left
+  end
+
+  def move_cursor_right
+    @cursor.move_right
   end
 
   def clear_line
@@ -306,15 +251,19 @@ class InputBox
     @window.setpos(0, 3)
   end
 
-  def type_character(input)
-    if NORMAL_KEYS.include?(input)
-      @buffer.insert(@cursor.pos, input)
-      @window.setpos(0, 3)
-      @window.addstr(@buffer)
-      @cursor.move_right
-    else
-      @output.draw(input)
-    end
+  def type_character
+    @buffer.insert(@cursor.pos, @core.input.to_s)
+    @window.setpos(0, 3)
+    @window.addstr(@buffer)
+    @cursor.move_right(@core.input.to_s.length)
+  end
+
+  def shift_history_up
+    shift_history(:up)
+  end
+
+  def shift_history_down
+    shift_history(:down)
   end
 
   def shift_history(direction)
@@ -322,7 +271,30 @@ class InputBox
     clear_line
     @window.addstr(@history.current)
     @buffer = String.new(@history.current)
-    @cursor.set_pos(@buffer.length)
+    @cursor.pos = @buffer.length
+  end
+
+  def start_of_line
+    @cursor.pos = 0
+  end
+
+  def end_of_line ## line ends HERE
+    @cursor.pos = @buffer.length
+  end
+
+  def return
+    return if @buffer.empty?
+    @output.draw(" > #{@buffer}")
+    clear_line
+    @history.add(@buffer)
+    @output.draw(Commands.new(@output).run(@buffer).to_s)
+    @output.draw(" ")
+    @buffer = ""
+    @cursor.pos = 0
+  end
+
+  def under_construction
+    @output.draw("The key you have pressed in currently under construction.")
   end
 end
 
@@ -363,4 +335,9 @@ class Output
   end
 end
 
-Main.new.run
+begin
+  Main.new.run
+rescue Interrupt
+ensure
+  Curses.close_screen
+end
