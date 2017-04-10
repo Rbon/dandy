@@ -74,7 +74,7 @@ class InputHandler
     @output.draw(Commands.new(@output).run(@input.buffer).to_s)
     @output.draw(" ")
     @input.buffer = ""
-    @input.curs_pos = 0
+    @input.cursor.set_pos(0)
     @input.history_pos = 0
   end
 
@@ -93,31 +93,19 @@ class InputHandler
   end
 
   def left_arrow
-    return if @curs_pos.zero?
-    @curs_pos -= 1
-    @window.setpos(0, @curs_pos + 3)
+    @input.cursor.move_left
   end
 
   def right_arrow
-    return unless @curs_pos < @buffer.length
-    @curs_pos += 1
-    @window.setpos(0, @curs_pos + 3)
+    @input.cursor.move_right
   end
 
-  # def up_arrow
-    # if @history_pos == @history.length - 1
-      # access_history(0)
-    # else
-      # access_history(@history_pos + 1)
-    # end
-  # end
-
   def up_arrow
-    @input.prev_history
+    @input.shift_history(:up)
   end
 
   def down_arrow
-    @input.next_history
+    @input.shift_history(:down)
   end
 
   def home_key
@@ -153,6 +141,28 @@ class History
 
   def current
     @history[@pos]
+  end
+end
+
+class Cursor
+  attr_reader :pos
+
+  def initialize(box)
+    @box = box
+    @pos = 0
+  end
+
+  def move_right
+    set_pos([@pos + 1, @box.buffer.length].min)
+  end
+
+  def move_left
+    set_pos([@pos - 1, 0].max)
+  end
+
+  def set_pos(pos)
+    @pos = pos
+    @box.window.setpos(0, pos + 3)
   end
 end
 
@@ -270,17 +280,18 @@ end
 class InputBox
   include Keys
 
-  attr_reader :window, :output
+  attr_reader :window, :output, :cursor
   attr_accessor :buffer, :curs_pos, :history, :history_pos
 
   def initialize(core)
     @history = History.new
     @core = core
-    @curs_pos = 0
+    # @curs_pos = 0
     term_w = Curses.cols - 1
     term_h = Curses.lines - 1
     @window = Curses::Window.new(1, term_w, term_h, 0)
     @output = Output.new(self)
+    @cursor = Cursor.new(self)
     @window.keypad = true
     @window.addstr(" > ")
     @buffer = ""
@@ -302,23 +313,14 @@ class InputBox
 
   def type_character(input)
     if NORMAL_KEYS.include?(input)
-      @buffer.insert(@curs_pos, input)
+      @buffer.insert(@cursor.pos, input)
       @window.setpos(0, 3)
       @window.addstr(@buffer)
-      @curs_pos += 1
-      @window.setpos(0, @curs_pos + 3)
+      @cursor.move_right
       @window.refresh
     else
       @output.draw(input)
     end
-  end
-
-  def prev_history
-    shift_history(:up)
-  end
-
-  def next_history
-    shift_history(:down)
   end
 
   def shift_history(direction)
@@ -326,7 +328,7 @@ class InputBox
     clear_line
     @window.addstr(@history.current)
     @buffer = String.new(@history.current)
-    @curs_pos = @buffer.length
+    @cursor.set_pos(@buffer.length)
   end
 end
 
