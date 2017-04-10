@@ -109,13 +109,11 @@ class InputHandler
   end
 
   def home_key
-    @input.window.setpos(0, 3)
-    @curs_pos = 0
+    @input.cursor.set_pos(0)
   end
 
   def end_key
-    @input.window.setpos(0, 3 + @input.buffer.length)
-    @curs_pos = @input.buffer.length
+    @input.cursor.set_pos(@input.buffer.length)
   end
 end
 
