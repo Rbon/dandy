@@ -104,20 +104,20 @@ class InputHandler
     @window.setpos(0, @curs_pos + 3)
   end
 
+  # def up_arrow
+    # if @history_pos == @history.length - 1
+      # access_history(0)
+    # else
+      # access_history(@history_pos + 1)
+    # end
+  # end
+
   def up_arrow
-    if @history_pos == @history.length - 1
-      access_history(0)
-    else
-      access_history(@history_pos + 1)
-    end
+    @input.prev_history
   end
 
   def down_arrow
-    if @history_pos.zero?
-      access_history(@history.length - 1)
-    else
-      access_history(@history_pos - 1)
-    end
+    @input.next_history
   end
 
   def home_key
@@ -135,12 +135,24 @@ class History
   def initialize
     @history = [""]
     @pos = 0
-    @current = nil
   end
 
   def add(input)
     @history.delete(input)
     @history.insert(1, String.new(input))
+    @pos = 0
+  end
+
+  def shift_up
+    @pos = (@pos + 1) % (@history.length)
+  end
+
+  def shift_down
+    @pos = (@pos - 1) % (@history.length)
+  end
+
+  def current
+    @history[@pos]
   end
 end
 
@@ -274,16 +286,6 @@ class InputBox
     @buffer = ""
   end
 
-  def handle_input
-    input = @window.getch
-    if SPECIAL_KEYS[input]
-      events = KeyEvents.new(self, @output)
-      events.method(SPECIAL_KEYS[input]).call
-    else
-      type_character(input.to_s)
-    end
-  end
-
   def remove_character(position)
     @buffer.slice!(position)
     @window.setpos(0, 3)
@@ -291,7 +293,7 @@ class InputBox
     @window.setpos(0, position + 3)
   end
 
-  def clear_line()
+  def clear_line
     @window.setpos(0, 3)
     @window.addstr(" " * @buffer.length)
     @window.setpos(0, 3)
@@ -311,16 +313,22 @@ class InputBox
     end
   end
 
-  def access_history(position)
-    @history_pos = position
+  def prev_history
+    shift_history(:up)
+  end
+
+  def next_history
+    shift_history(:down)
+  end
+
+  def shift_history(direction)
+    @history.method("shift_#{direction}").call
     clear_line
-    @window.addstr(@history[@history_pos])
-    @buffer = String.new(@history[@history_pos])
+    @window.addstr(@history.current)
+    @buffer = String.new(@history.current)
     @curs_pos = @buffer.length
   end
 end
-
-
 
 class Output
   attr_reader :window
