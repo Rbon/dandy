@@ -62,7 +62,6 @@ class InputHandler
       @input.window.addstr(line)
       @input.buffer = String.new(line)
       @input.curs_pos = @input.buffer.length
-      @input.window.refresh
     end
   end
 
@@ -79,17 +78,11 @@ class InputHandler
   end
 
   def backspace
-    return if @input.curs_pos.zero?
-    @input.curs_pos -= 1
-    @input.remove_character(@input.curs_pos)
-    @input.window.refresh
+    @input.remove_character(-1) if @input.cursor.pos > 0
   end
 
   def delete
-    return unless @curs_pos < @buffer.length
-    remove_character(@curs_pos)
-    @window.refresh
-    @window.refresh
+    @input.remove_character
   end
 
   def left_arrow
@@ -151,14 +144,15 @@ class Cursor
   end
 
   def move_right
-    set_pos([@pos + 1, @box.buffer.length].min)
+    set_pos(@pos + 1)
   end
 
   def move_left
-    set_pos([@pos - 1, 0].max)
+    set_pos(@pos - 1)
   end
 
   def set_pos(pos)
+    pos = [[0, pos].max, @box.buffer.length].min ## stop pos from being oob
     @pos = pos
     @box.window.setpos(0, pos + 3)
   end
@@ -182,16 +176,21 @@ class Main
     # Curses.curs_set(0) ## Invisible cursor
     Curses.noecho ## Don't display pressed characters
     @input_box = InputBox.new(self)
-    @output = @input_box.output
+    @output_box = @input_box.output
     # @output.silent = true
     # exec("config")
     # @output.draw(" ")
     # @output.silent = false
+
     ## causes the screen to flicker once at boot so it doesn't flicker again
-    @output.window.refresh
+    @output_box.window.refresh
     @input_box.window.refresh
 
-    InputHandler.new(@input_box, @output).handle_input while @running
+    while @running
+      InputHandler.new(@input_box, @output_box).handle_input
+      @output_box.window.refresh
+      @input_box.window.refresh
+    end
   rescue Interrupt
   ensure
     Curses.close_screen
@@ -284,7 +283,6 @@ class InputBox
   def initialize(core)
     @history = History.new
     @core = core
-    # @curs_pos = 0
     term_w = Curses.cols - 1
     term_h = Curses.lines - 1
     @window = Curses::Window.new(1, term_w, term_h, 0)
@@ -295,18 +293,17 @@ class InputBox
     @buffer = ""
   end
 
-  def remove_character(position)
-    @buffer.slice!(position)
+  def remove_character(offset = 0)
+    @buffer.slice!(@cursor.pos + offset)
     @window.setpos(0, 3)
     @window.addstr("#{buffer} ")
-    @window.setpos(0, position + 3)
+    @cursor.set_pos(@cursor.pos + offset)
   end
 
   def clear_line
     @window.setpos(0, 3)
     @window.addstr(" " * @buffer.length)
     @window.setpos(0, 3)
-    @window.refresh
   end
 
   def type_character(input)
@@ -315,7 +312,6 @@ class InputBox
       @window.setpos(0, 3)
       @window.addstr(@buffer)
       @cursor.move_right
-      @window.refresh
     else
       @output.draw(input)
     end
@@ -360,8 +356,6 @@ class Output
     end
     @buffer = @buffer.join("\n") + "\n"
     @window.addstr(@buffer)
-    @window.refresh
-    @input.window.refresh
   end
 
   def debug(string)
