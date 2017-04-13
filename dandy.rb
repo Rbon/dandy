@@ -16,40 +16,27 @@
 ## Text can be typed off screen, if the line is long enough. I don't know what
 ## the expected result should be, but I don't like it as it is.
 
-require "json"
 require "curses"
+require "yaml"
 
-class InputHandler
-  SPECIAL_KEYS = {
-    tab:         9,
-    enter:       10,
-    down_arrow:  258,
-    up_arrow:    259,
-    left_arrow:  260,
-    right_arrow: 261,
-    home_key:    262,
-    backspace:   263,
-    delete:      330,
-    end_key:     360
-  }.invert
-  BINDINGS = {
-    tab:         :under_construction,
-    enter:       :return,
-    backspace:   :left_delete_character,
-    delete:      :delete_character,
-    left_arrow:  :move_cursor_left,
-    right_arrow: :move_cursor_right,
-    up_arrow:    :shift_history_up,
-    down_arrow:  :shift_history_down,
-    home_key:    :start_of_line,
-    end_key:     :end_of_line
-  }.freeze
+## Hanldes the input.
+class Bindings
+  attr_reader :keys, :bindings
 
-  def self.handle_input(input)
-    BINDINGS[SPECIAL_KEYS[input]] || :type_character
+  def initialize(core, prompt, output_box)
+    @groups = {"core": core, "prompt": prompt, "output_box": output_box}
+    @keys = YAML.load(File.read("keys.yaml"))[0].invert
+    @bindings = YAML.load(File.read("bindings.yaml"))[0]
+  end
+
+  def handle_input(input)
+    group, action = @bindings[@keys[input]] || [:prompt, "type_key"]
+    # @groups[:output_box].draw("#{@groups[group.to_sym]}, #{action.inspect}")
+    @groups[group.to_sym].method(action).call
   end
 end
 
+# A generic command history class with methods to manage itself.
 class History
   def initialize
     @history = [""]
@@ -75,6 +62,7 @@ class History
   end
 end
 
+# The cursor for the command prompt.
 class Cursor
   attr_reader :pos
 
@@ -94,40 +82,43 @@ class Cursor
   def pos=(new_pos)
     new_pos = [[0, new_pos].max, @box.buffer.length].min ## keep in bounds
     @pos = new_pos
-    @box.window.setpos(0, new_pos + 3)
+    @box.setpos(0, new_pos + 3)
   end
 end
 
+# The class that contains the main loop.
 class Main
   attr_reader :aliases, :input_window, :draw_output, :input, :output, :silent
   attr_writer :running
 
   def initialize
-    @commands = %w(quit exit roll help)
+    @commands = %w[quit exit roll help]
     @aliases = {}
     @running = true
     # @debug = true
     Curses.init_screen
     # Curses.curs_set(0) ## Invisible cursor
     Curses.noecho ## Don't display pressed characters
+    Curses.raw ## Passes interruupts, etc. through to the program.
     @input_box = InputBox.new(self)
     @output_box = @input_box.output
+    @bindings = Bindings.new(self, @input_box, @output_box)
     # @output.silent = true
     # exec("config")
     # @output.draw(" ")
     # @output.silent = false
 
     ## causes the screen to flicker once at boot so it doesn't flicker again
-    @output_box.window.refresh
-    @input_box.window.refresh
+    @output_box.refresh
+    @input_box.refresh
   end
 
   def run
     while @running
-      @input = @input_box.window.getch
-      @input_box.method(InputHandler.handle_input(@input)).call
-      @output_box.window.refresh
-      @input_box.window.refresh
+      @input = @input_box.getch
+      @bindings.handle_input(@input)
+      @output_box.refresh
+      @input_box.refresh
     end
   end
 
@@ -146,6 +137,7 @@ class Main
   end
 end
 
+# Methods that are the built-in commands for dandy.
 class Commands
   COMMAND_LIST = {
     alias: :make_alias,
@@ -209,28 +201,37 @@ class Commands
   end
 end
 
-class InputBox
+# Extends the Curses::Window class to add some more stuff.
+class Box < Curses::Window
+  def initialize(height, width, top, left)
+    super
+    @max_w = maxx
+    @max_h = maxy
+  end
+end
+
+# The command prompt at the bottom of the screen.
+class InputBox < Box
   attr_reader :window, :output, :cursor
   attr_accessor :buffer, :history
 
   def initialize(core)
+    super(1, Curses.cols - 1, Curses.lines - 1, 0)
     @core = core
-    term_w = Curses.cols - 1
-    term_h = Curses.lines - 1
-    @window = Curses::Window.new(1, term_w, term_h, 0)
     @history = History.new
-    @output = Output.new(self)
+    @output = OutputBox.new
+    @prompt = " > "
     @cursor = Cursor.new(self)
-    @window.keypad = true
-    @window.addstr(" > ")
     @buffer = ""
+    @line_start = @prompt.length
+    self.keypad = true
+    addstr(@prompt)
   end
 
   def delete_character(offset = 0)
-    @buffer.slice!(@cursor.pos + offset)
-    @window.setpos(0, 3)
-    @window.addstr("#{buffer} ")
-    @cursor.pos = @cursor.pos + offset
+    @buffer.slice!(@cursor.pos)
+    draw("#{@buffer} ")
+    @cursor.pos += offset
   end
 
   def left_delete_character
@@ -246,16 +247,20 @@ class InputBox
   end
 
   def clear_line
-    @window.setpos(0, 3)
-    @window.addstr(" " * @buffer.length)
-    @window.setpos(0, 3)
+    setpos(0, @prompt.length)
+    addstr(" " * @buffer.length)
+    setpos(0, @prompt.length)
   end
 
-  def type_character
-    @buffer.insert(@cursor.pos, @core.input.to_s)
-    @window.setpos(0, 3)
-    @window.addstr(@buffer)
-    @cursor.move_right(@core.input.to_s.length)
+  def type_key(key = @core.input.to_s)
+    @buffer.insert(@cursor.pos, key)
+    draw(@buffer)
+    @cursor.pos += key.length
+  end
+
+  def draw(str)
+    clear_line
+    addstr(str)
   end
 
   def shift_history_up
@@ -269,7 +274,7 @@ class InputBox
   def shift_history(direction)
     @history.method("shift_#{direction}").call
     clear_line
-    @window.addstr(@history.current)
+    draw(@history.current)
     @buffer = String.new(@history.current)
     @cursor.pos = @buffer.length
   end
@@ -285,6 +290,7 @@ class InputBox
   def return
     return if @buffer.empty?
     @output.draw(" > #{@buffer}")
+    pos = 0
     clear_line
     @history.add(@buffer)
     @output.draw(Commands.new(@output).run(@buffer).to_s)
@@ -293,51 +299,47 @@ class InputBox
     @cursor.pos = 0
   end
 
-  def under_construction
-    @output.draw("The key you have pressed in currently under construction.")
+  def halt
+    @core.running = false
+  end
+
+  def test
+    @output.draw(Curses::Key::LEFT)
   end
 end
 
-class Output
+# The section of the screen where output is drawn.
+class OutputBox < Box
   attr_reader :window
   attr_writer :silent
 
-  def initialize(input)
-    term_w = Curses.cols - 1
-    term_h = Curses.lines - 1
-    @input = input
-    @window = Curses::Window.new(term_h, term_w, 0, 0)
-    @buffer = ""
+  def initialize
+    super(Curses.lines - 1, Curses.cols + 1, 0, 0)
     @silent = false
+    @buffer = []
   end
 
   def draw(string)
-    return if @silent
-    string = string.scan(/.{1,#{@window.maxx - 1}}/).join("\n")
-    @buffer << string
-    @buffer = @buffer.split("\n")
-    if @buffer.length > @window.maxy
-      delta = @buffer.length - @window.maxy
-      @buffer = @buffer[delta..-1]
+    string.scan(/.{1,#{@max_w - 1}}/).map do |line|
+      @buffer << line.ljust(@max_w - 1, " ")
     end
-    if @buffer.length < @window.maxy
-      delta = @window.maxy - @buffer.length
-      @window.setpos(delta, 0)
-    else
-      @window.setpos(0, 0)
-    end
-    @buffer = @buffer.join("\n") + "\n"
-    @window.addstr(@buffer)
+    line_count = @buffer.length
+    @buffer.slice!(0, [line_count - @max_h, 0].max)
+    output(@buffer.join("\n"), [@max_h - line_count, 0].max)
   end
 
   def debug(string)
     draw_output(string) if @debug
   end
+
+  def output(string, v_pos)
+    setpos(v_pos, 0)
+    addstr(string)
+  end
 end
 
 begin
   Main.new.run
-rescue Interrupt
 ensure
   Curses.close_screen
 end

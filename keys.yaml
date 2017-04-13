@@ -1,0 +1,13 @@
+---
+- crtl_c:      3
+  tab:         9
+  enter:       10
+  down_arrow:  258
+  up_arrow:    259
+  left_arrow:  260
+  right_arrow: 261
+  home_key:    262
+  backspace:   263
+  delete:      330
+  end_key:     360
+...

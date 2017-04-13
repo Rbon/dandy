@@ -1,0 +1,13 @@
+---
+- tab:         [prompt, test]
+  ctrl_c:      [prompt, halt]
+  enter:       [prompt, return]
+  backspace:   [prompt, left_delete_character]
+  delete:      [prompt, delete_character]
+  left_arrow:  [prompt, move_cursor_left]
+  right_arrow: [prompt, move_cursor_right]
+  up_arrow:    [prompt, shift_history_up]
+  down_arrow:  [prompt, shift_history_down]
+  home_key:    [prompt, start_of_line]
+  end_key:     [prompt, end_of_line]
+...
