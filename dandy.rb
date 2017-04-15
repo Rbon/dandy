@@ -229,7 +229,7 @@ class InputBox < Box
   end
 
   def delete_character(offset = 0)
-    @buffer.slice!(@cursor.pos)
+    @buffer.slice!(@cursor.pos + offset)
     draw("#{@buffer} ")
     @cursor.pos += offset
   end
